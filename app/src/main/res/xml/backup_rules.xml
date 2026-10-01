@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 及以下的备份规则。
+  应用内容（文章）全部内置在 APK 中，无需备份；
+  这里只保留体积很小的阅读偏好，换表后设置不至于丢失。
+-->
+<full-backup-content>
+    <include
+        domain="sharedpref"
+        path="." />
+</full-backup-content>
