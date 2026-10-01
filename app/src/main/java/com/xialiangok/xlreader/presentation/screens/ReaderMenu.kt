@@ -51,11 +51,10 @@ import com.xialiangok.xlreader.data.stepSpacingLevel
 import com.xialiangok.xlreader.presentation.theme.ReaderButtonContainer
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
 import kotlinx.coroutines.delay
-import kotlin.time.Duration.Companion.milliseconds
-import androidx.compose.runtime.remember
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
 
 /** 菜单底色：完全不透明（`0xFF`），不透过下面的正文，也不做任何淡入淡出。 */
 private val MenuBackground = Color(0xFF141414)
@@ -122,7 +121,7 @@ fun ReaderMenuOverlay(
             }
             Text(
 
-                text = "time2\n"+"阅读设置",
+                text = "$time2\n阅读设置",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )

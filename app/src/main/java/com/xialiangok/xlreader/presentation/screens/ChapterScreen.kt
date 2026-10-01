@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -40,11 +41,14 @@ import com.xialiangok.xlreader.data.epub.EpubBlock
 import com.xialiangok.xlreader.data.epub.EpubBook
 import com.xialiangok.xlreader.data.epub.ReadHistory
 import com.xialiangok.xlreader.data.epub.ReadingPosition
+import com.xialiangok.xlreader.presentation.BindGestureActions
 import com.xialiangok.xlreader.presentation.findActivity
+import com.xialiangok.xlreader.presentation.scrollByItems
 import com.xialiangok.xlreader.presentation.theme.ReadingMetrics
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
@@ -210,6 +214,18 @@ private fun ChapterBody(
 ) {
     val listState = rememberLazyListState()
     var menuVisible by remember(chapterIndex) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // 体感手势：单击 = 弹出/收起快捷菜单（与手指单击正文完全一样），
+    // 返回 = 走系统返回手势那条出口（回文件列表），翻页 = 按条目滚动。
+    BindGestureActions(
+        onTap = {
+            menuVisible = !menuVisible
+            onSaveProgress()
+        },
+        onBack = onBackToFileList,
+        onScrollBy = { delta -> scope.launch { scrollByItems(listState, delta) } },
+    )
 
     // 阅读位置只上报给上层，**不在这里写盘**：滚动本身不产生任何文件写入。
     // 真正写 history.txt 只有四个时机——加载完这一章 500ms（见下面那个 effect）、

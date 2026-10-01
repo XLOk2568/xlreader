@@ -4,11 +4,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -25,7 +27,11 @@ import com.xialiangok.xlreader.data.file.displayPath
 import com.xialiangok.xlreader.data.file.formatSize
 import com.xialiangok.xlreader.data.file.listDirectory
 import com.xialiangok.xlreader.data.file.parentWithinRoot
+import com.xialiangok.xlreader.presentation.BindGestureActions
+import com.xialiangok.xlreader.presentation.centeredItemKey
+import com.xialiangok.xlreader.presentation.scrollByItems
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
@@ -67,7 +73,23 @@ fun HomeScreen(
     val folderCount = entries.count { it.isDirectory }
     val bookCount = entries.size - folderCount
 
-    WearListScreen(resetKey = dirPath) {
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    // 体感手势：单击 = 打开屏幕上正中央的那一项（列表项用路径当 key，正好能反查回条目），
+    // 返回 = 上一级（已经在最外层就没有这个动作），翻页 = 按条目滚动。
+    BindGestureActions(
+        onTap = {
+            val path = centeredItemKey(listState) as? String ?: return@BindGestureActions
+            entries.firstOrNull { it.path == path }?.let { entry ->
+                if (entry.isDirectory) onOpenDirectory(entry.path) else onOpenBook(entry.path)
+            }
+        },
+        onBack = if (parent != null) onNavigateUp else null,
+        onScrollBy = { delta -> scope.launch { scrollByItems(listState, delta) } },
+    )
+
+    WearListScreen(resetKey = dirPath, listState = listState) {
         item {
             ListHeader {
                 Text(

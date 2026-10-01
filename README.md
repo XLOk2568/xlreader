@@ -8,7 +8,7 @@
 * 最低支持：**Android 11（API 30）**，即 Wear OS 3
 * 编译 SDK：36.1　目标 SDK：36
 * 界面：Jetpack Compose for Wear OS（Material 3）
-* 体积：**Release APK 1.78 MB**（AS 默认构建的 release 是 26.4 MB）
+* 体积：**Release APK 2.05 MB**（AS 默认构建的 release 是 26.4 MB）
 * 联网：**完全不联网**；唯一的敏感权限是「所有文件访问」，详见下文
 * 电子书处理：**零第三方库**（见下文「EPUB 解析」一节）
 * 打开方式：解压到**与原书同名的同级目录**再读（不占用应用缓存），阅读位置记在该目录的 `history.txt`
@@ -54,11 +54,17 @@ buildTypes {
 ||未优化（AS 默认）|release（本配置）|
 |-|-|-|
 |debug APK|25.0 MB（8 个 dex）|25.0 MB（标准开发包，不作优化）|
-|**release APK**|26.4 MB|**1.78 MB**|
-|release dex|25.6 MB / 7 个|**1.45 MB / 1 个**|
+|**release APK**|26.4 MB|**2.05 MB**|
+|release dex|25.6 MB / 7 个|**1.81 MB / 1 个**|
 |baseline profile|无|**有**（`assets/dexopt/baseline.prof`）|
 
 **要看体积与流畅度，请认准 release 包。** debug 包大且慢是 Android Studio 开发的正常状态。
+
+> 体感手势（2026-10）把 release 从 1.78 MB 推到 2.05 MB：其中约 **0.22 MB** 来自手势详情页那个
+> **自由改名的输入框** —— 它会把系统 IME / 文本编辑那一整套代码从「被 R8 剥掉」变成「被保留」
+> （依赖本身早就在，`androidx.emoji2` / `autofill` / `appcompat-resources` 这些版本标记改动前后
+> 一模一样）。手势检测引擎与四个新页面本身只占约 0.05 MB；不需要自由改名的话，换成一组预设名字
+> 就能把这 0.22 MB 省回来。
 
 ### 3\. 为什么 release 比 debug 更流畅
 
@@ -119,7 +125,8 @@ adb install -r app\\build\\outputs\\apk\\release\\app-release.apk
 |**缓存更新**|已有完整解压缓存、且与原文件版本对不上时，打开前会询问「重新解压 / 直接阅读」；解压过程显示百分比进度，更新缓存不会清掉阅读进度|
 |**记住选择**|解压完或选过「直接阅读」后会记下当前 epub 版本，**之后不再询问**；等原文件变了才会再问一次|
 |权限引导|未授权时先引导去系统设置打开「所有文件访问」，并带「已授权，重新检查」|
-|设置|正文字号（磅值 1..999，`− / ＋` 一次一磅）、段间距（dp 值 0..999，`− / ＋` 一次 1 dp）、减少动效（固定为开、不可点）、阅读时常亮|
+|设置|正文字号（磅值 1..999，`− / ＋` 一次一磅）、段间距（dp 值 0..999，`− / ＋` 一次 1 dp）、减少动效（固定为开、不可点）、阅读时常亮；下面是**「传感器设置」入口**|
+|**体感手势**|设置 →「传感器设置」：**进这一页前先检查加速度计**，读不到就先给一页与「所有文件访问」同款的授权引导（「去系统设置查看 / 已授权，重新检查」，路径提示在页底）—— 注意加速度计本身**不需要运行时权限**，这一页挡住的其实是「设备没有该传感器」或「系统 / ROM 把它关了」。**新增手势**时先倒计时 **3 秒**，再在 **10 秒**内最多采 **200 个点**，期间**单击屏幕立刻结束**；两种情况都马上整理，只保存横滚/俯仰的**最大与最小角度**。每条手势可**改名**、选**动作**（退出 / 单击 / 返回 / 向下翻页 / 向上翻页，翻页类可设**速度**＝一次滚动多少条目）、**单独开关**、**删除**（详情页里还有「重新录制」）。**检测间隔**（默认 200 ms）对所有手势通用；**启用页面**可勾选「文件列表 / 章节目录 / 正文阅读」，总开关关掉、进入任何没有启用手势的页面、以及**应用退到后台或表盘息屏**，都会**立刻注销传感器**；进入启用了手势的页面时会提示一句「手势检测任务已启用」|
 |关于|版本、最低系统要求、定位说明；入口通往「开源许可」|
 |开源许可|列出随应用一同分发的开源项目、许可证，以及各项目在应用里的职责|
 
@@ -170,7 +177,7 @@ adb install -r app\\build\\outputs\\apk\\release\\app-release.apk
 EPUB 本质就是一个 ZIP：`META-INF/container.xml` 指向 OPF 文件，OPF 里有书名/作者（metadata）、
 资源清单（manifest）和阅读顺序（spine），spine 每项对应一个 XHTML 文档。用 JDK 自带的
 `ZipFile` 加一点字符串处理就能读完，所以**没有引入 readium / epublib**——那会给这个
-1.78 MB 的包凭空加上好几 MB。
+2.05 MB 的包凭空加上好几 MB。
 
 几个刻意的取舍：
 
@@ -297,7 +304,7 @@ item=12
 ```
 
 [`EpubParserTest.kt`](app/src/test/java/com/xialiangok/xlreader/data/epub/EpubParserTest.kt)
-共 58 个用例（`EpubParserTest` 45 个 + `ReaderPreferencesTest` 13 个），覆盖：
+共 76 个用例（`EpubParserTest` 45 个 + `ReaderPreferencesTest` 13 个 + `SensorGestureTest` 18 个），覆盖：
 
 * **解压与缓存**：解压到同名目录、已解压则复用（改了文件再打开，改动还在）、
 缓存状态判定（missing / complete / foreign）、**「更新缓存」后仍保留 history.txt**、
@@ -324,7 +331,13 @@ SVG 变不支持块、**靠 manifest 的 media-type 认出头无扩展名的 SVG
 亮度 1.0 不变色、>1 一律夹到 1（**只压暗不外扩**）、<0 变全黑、
 按比例压暗、文字颜色与亮度叠加后的最终值、RGB 每次走 1 档且两端夹住、
 字号每次走 1 磅且夹在 1..999、默认字号 16 磅、
-屏幕亮度格式化（负数按「跟随系统」哨兵处理）。
+屏幕亮度格式化（负数按「跟随系统」哨兵处理）；
+* **体感手势**（`SensorGestureTest`）：平放为 0°、左右与前后立起来为 ±90°、
+低通滤波只吃新值的五分之一、录制整理只留最大最小角度（**空样本返回 null**）、
+容差的下限与上限（录得越窄越宽容、录到一大片也不会宽得离谱）、
+范围内 / 范围外 / 两个角度必须同时命中的判定、速度 1..50 与检测间隔 50..2000 的步进夹取、
+以及「总开关 / 启用页面 / 单个手势开关」三个条件对检测列表的影响
+（**总开关关掉或页面上一个手势都没开时，检测列表为空**）。
 
 其中 **`open does not parse chapter bodies` 是惰性解析的回归测试**：故意让第二章的文件
 不存在，如果哪天 `open()` 又开始预解析正文，它要么抛异常、要么得跳过那一章，
@@ -466,10 +479,12 @@ xlreader/
       │  ├─ res/                    # 中文字符串、纯黑启动主题、图标、备份规则
       │  └─ java/com/xialiangok/xlreader/
       │     ├─ presentation/MainActivity.kt   # 唯一 Activity，接收 VIEW intent
-      │     ├─ presentation/XlReaderApp.kt    # 根组件：路由 / 阅读偏好 / 权限跳转
+      │     ├─ presentation/XlReaderApp.kt    # 根组件：路由 / 阅读偏好 / 手势检测任务 / 权限跳转
       │     ├─ presentation/ActivityExt.kt    # 从 Context 里剥出 Activity（调屏幕亮度用）
+      │     ├─ presentation/GestureActions.kt # 页面登记体感手势动作的容器 + 居中项/按条目滚动
       │     ├─ presentation/screens/          # 文件浏览 / 章节列表 / 正文 / 权限 / 设置 / 关于 / 开源许可
       │     │                                 #   + ReaderMenu（阅读快捷菜单）/ WearListScreen（公用骨架）
+      │     │                                 #   + SensorSettings（手势设置 / 录制 / 详情 / 启用页面）
       │     ├─ presentation/preview/          # 所有 @Preview（放 main，两个变体都能预览）
       │     ├─ presentation/theme/Theme.kt    # 配色、主题、排版参数
       │     └─ data/
@@ -483,9 +498,13 @@ xlreader/
       │        ├─ epub/ReadHistory.kt         # history.txt 读写（上次阅读位置）
       │        ├─ ReaderPreferences.kt        # 全部阅读偏好 + RGB/亮度纯函数
       │        ├─ SettingsStore.kt            # SharedPreferences 读写偏好
+      │        ├─ sensor/SensorGesture.kt     # 体感手势模型 + 角度换算/滤波/整理/判定（纯函数）
+      │        ├─ sensor/SensorStore.kt       # 手势设置的 SharedPreferences（JSON）读写
+      │        ├─ sensor/TiltSensor.kt        # 加速度计检测器 + 录制采样器
       │        └─ OpenSourceLicenses.kt       # 开源项目清单
       ├─ test/java/.../EpubParserTest.kt      # 解析器的 JVM 单元测试（45 个用例）
       ├─ test/java/.../ReaderPreferencesTest.kt # RGB / 亮度 / 字号 / 段间距的单元测试（13 个用例）
+      ├─ test/java/.../sensor/SensorGestureTest.kt # 体感手势纯计算单测（18 个用例）
       └─ (没有 debug 源集)
 ```
 
@@ -525,6 +544,19 @@ xlreader/
 * **屏幕亮度**：只在阅读页生效（`LaunchedEffect` 应用 + `DisposableEffect` 在离开时还原成进来时的值）。
 * **内存**：全局只长期持有无数据的 `EpubBook`（书名/作者/章节名/路径），
 正文文本与解码后的位图都只活在正文页的局部状态里，离开即回收。
+* **体感手势**：只注册 `TYPE_ACCELEROMETER`（**不开陀螺仪、不用 Rotation Vector**，示例方案里
+功耗最低的一种），按设置的检测间隔采样（默认 200 ms ≈ 5 Hz），xyz 先过一阶低通滤波再换算成
+横滚 / 俯仰角。录制时只保留这段时间里角度的**最大与最小**值；判定时两侧各放宽一个
+**随范围变化、上下都夹住**的容差（静止录到的姿势只有一两度，全靠容差才复现得了），
+同一个姿势只触发一次 —— 要**离开范围**才重新武装，否则一直摆着就会每个采样周期触发一下。
+检测任务由「总开关 + 当前页在启用列表里 + 这一页至少有一个没被单独关掉的手势」三个条件共同
+决定，任何一条不满足就立刻 `unregisterListener`（进别的页面、关掉总开关都是立刻停），
+另外再压一条**应用不在前台就停**：跟着宿主 Activity 的 `ON_PAUSE`（含表盘息屏）注销、
+`ON_RESUME` 再注册 —— 用户看不见的时候不该还在采样耗电，也不该在后台把手势动作执行出来。
+动作只落在**当前页面**上：页面用 `BindGestureActions` 把自己支持的动作登记到根组件（回调存在
+一个稳定对象里，每次重组只刷新字段、不引起重组），没登记的动作就什么都不做，不会串页。
+正文页的「单击 / 返回 / 翻页」= 单击正文弹菜单 / 系统返回（回文件列表）/ 按条目滚动；
+列表页的「单击」= 打开屏幕上正中央的那一项（靠 LazyColumn 的 key 反查回条目）。
 * **持久化**：阅读偏好用 `SharedPreferences` 包成 `SettingsStore`（core-ktx 的 `edit {}`）；
 阅读位置写在书的 `history.txt` 里，跟着书走。
 * **返回手势**：`BackHandler` 接管系统返回，页面内没有同名按钮时行为与「退回上一层」一致；

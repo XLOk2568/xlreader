@@ -32,6 +32,7 @@ import com.xialiangok.xlreader.presentation.theme.readerButtonColors
 fun SettingsScreen(
     preferences: ReaderPreferences,
     onPreferencesChange: (ReaderPreferences) -> Unit,
+    onOpenSensorSettings: () -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -97,6 +98,19 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("阅读时常亮")
+            }
+        }
+
+        item { ListSubHeader { Text("体感手势(Bate)") } }
+        item {
+            // 传感器设置是独立的一份数据（手势列表 + 检测间隔 + 启用页面），
+            // 内容比这一页多得多，所以单独开一页，这里只留入口。
+            Button(
+                onClick = onOpenSensorSettings,
+                modifier = Modifier.fillMaxWidth(),
+                colors = readerButtonColors(),
+            ) {
+                Text("传感器设置")
             }
         }
 

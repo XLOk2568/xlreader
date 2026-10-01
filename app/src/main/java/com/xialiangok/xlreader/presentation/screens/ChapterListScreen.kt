@@ -5,11 +5,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -24,9 +26,17 @@ import androidx.wear.compose.material3.Text
 import com.xialiangok.xlreader.data.epub.EpubBook
 import com.xialiangok.xlreader.data.epub.ReadHistory
 import com.xialiangok.xlreader.data.epub.ReadingPosition
+import com.xialiangok.xlreader.presentation.BindGestureActions
+import com.xialiangok.xlreader.presentation.centeredItemKey
+import com.xialiangok.xlreader.presentation.scrollByItems
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
+
+/** 列表项的 key：靠它把「屏幕上正中央的那一项」反查回具体章节。 */
+private const val CHAPTER_KEY_PREFIX = "chapter:"
+private const val RESUME_KEY = "resume"
 
 /**
  * 章节目录页。
@@ -62,10 +72,32 @@ fun ChapterListScreen(
     val headerItems = 2 + (if (resume != null) 1 else 0)
     val scrollTarget = currentChapter?.let { headerItems + it } ?: 0
 
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    // 体感手势：单击 = 打开屏幕上正中央的那一项（含「继续阅读」卡片），
+    // 返回 = 退回文件列表，翻页 = 按条目滚动。
+    BindGestureActions(
+        onTap = {
+            val key = centeredItemKey(listState) as? String ?: return@BindGestureActions
+            val index = when {
+                key == RESUME_KEY -> resume?.chapter
+                key.startsWith(CHAPTER_KEY_PREFIX) ->
+                    key.removePrefix(CHAPTER_KEY_PREFIX).toIntOrNull()
+
+                else -> null
+            }
+            index?.let(onOpenChapter)
+        },
+        onBack = onBack,
+        onScrollBy = { delta -> scope.launch { scrollByItems(listState, delta) } },
+    )
+
     WearListScreen(
         // saved 从 null 变成有值时重算一次滚动位置，保证偏移量是对的。
         resetKey = saved,
         startIndex = scrollTarget,
+        listState = listState,
     ) {
         item {
             ListHeader {
@@ -88,7 +120,7 @@ fun ChapterListScreen(
         }
 
         if (resume != null) {
-            item {
+            item(key = RESUME_KEY) {
                 Card(
                     onClick = { onOpenChapter(resume.chapter) },
                     modifier = Modifier.fillMaxWidth(),
@@ -113,7 +145,11 @@ fun ChapterListScreen(
             }
         }
 
-        itemsIndexed(titles, contentType = { _, _ -> "chapter" }) { index, title ->
+        itemsIndexed(
+            titles,
+            key = { index, _ -> "$CHAPTER_KEY_PREFIX$index" },
+            contentType = { _, _ -> "chapter" },
+        ) { index, title ->
             Card(
                 onClick = { onOpenChapter(index) },
                 modifier = Modifier.fillMaxWidth(),

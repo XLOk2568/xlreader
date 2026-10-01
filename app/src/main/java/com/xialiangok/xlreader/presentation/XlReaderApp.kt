@@ -4,15 +4,23 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import com.xialiangok.xlreader.data.ReaderPreferences
 import com.xialiangok.xlreader.data.SettingsStore
 import com.xialiangok.xlreader.data.epub.EpubBook
@@ -24,6 +32,13 @@ import com.xialiangok.xlreader.data.epub.ReadingPosition
 import com.xialiangok.xlreader.data.file.defaultRootPath
 import com.xialiangok.xlreader.data.file.hasAllFilesAccess
 import com.xialiangok.xlreader.data.file.parentWithinRoot
+import com.xialiangok.xlreader.data.sensor.GestureAction
+import com.xialiangok.xlreader.data.sensor.GesturePage
+import com.xialiangok.xlreader.data.sensor.SensorGesture
+import com.xialiangok.xlreader.data.sensor.SensorSettings
+import com.xialiangok.xlreader.data.sensor.SensorStore
+import com.xialiangok.xlreader.data.sensor.TiltGestureDetector
+import com.xialiangok.xlreader.data.sensor.hasAccelerometer
 import com.xialiangok.xlreader.presentation.screens.AboutScreen
 import com.xialiangok.xlreader.presentation.screens.CachePromptScreen
 import com.xialiangok.xlreader.presentation.screens.ChapterListScreen
@@ -33,12 +48,18 @@ import com.xialiangok.xlreader.presentation.screens.HomeScreen
 import com.xialiangok.xlreader.presentation.screens.LicensesScreen
 import com.xialiangok.xlreader.presentation.screens.NoticeScreen
 import com.xialiangok.xlreader.presentation.screens.PermissionScreen
+import com.xialiangok.xlreader.presentation.screens.SensorGestureDetailScreen
+import com.xialiangok.xlreader.presentation.screens.SensorGestureRecordScreen
+import com.xialiangok.xlreader.presentation.screens.SensorPagesScreen
+import com.xialiangok.xlreader.presentation.screens.SensorPermissionScreen
+import com.xialiangok.xlreader.presentation.screens.SensorSettingsScreen
 import com.xialiangok.xlreader.presentation.screens.SettingsScreen
 import com.xialiangok.xlreader.presentation.theme.XlReaderTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.UUID
 
 /** 页面路由。手表上页面很少，用一个密封接口 + `when` 比引入导航库更轻。 */
 sealed interface Route {
@@ -55,6 +76,18 @@ sealed interface Route {
     data object Settings : Route
     data object About : Route
     data object Licenses : Route
+
+    /** 体感手势设置主页。 */
+    data object SensorSettings : Route
+
+    /** 选择在哪些页面启用手势。 */
+    data object SensorPages : Route
+
+    /** 单条手势的详情（改名 / 动作 / 速度 / 重录 / 删除）。 */
+    data class SensorGestureEdit(val id: String) : Route
+
+    /** 录制一条手势；[id] 为空表示新增，否则是重录已有的那一条。 */
+    data class SensorRecord(val id: String?) : Route
 }
 
 /** 一本书的打开状态。 */
@@ -144,6 +177,97 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                 else -> Route.Permission
             },
         )
+    }
+
+    // 体感手势是另一份设置（手势列表 / 检测间隔 / 启用页面），存在自己的 SharedPreferences 里，
+    // 与阅读排版那份互不影响。
+    val sensorStore = remember(context) { SensorStore(context) }
+    var sensorSettings by remember { mutableStateOf(sensorStore.read()) }
+    val updateSensorSettings: (SensorSettings) -> Unit = remember {
+        { updated: SensorSettings ->
+            sensorSettings = updated
+            sensorStore.save(updated)
+        }
+    }
+
+    // 加速度计读不到（设备没有 / 系统或 ROM 关掉了）时，先给一页同款授权引导，
+    // 和「所有文件访问」那一页的做法一致；用户从系统设置回来后点「重新检查」再放行。
+    var sensorReady by remember(context) { mutableStateOf(hasAccelerometer(context)) }
+
+    // 页面用 BindGestureActions 把自己能响应的动作登记到这里，根组件在手势命中时照着做。
+    val gestureHolder = remember { GestureActionHolder() }
+
+    /**
+     * 把一个命中的手势翻译成当前页面上的动作。
+     *
+     * 「退出」是根组件自己就能做的；其余三种都落在当前页面上 —— 页面没登记这个动作
+     * （例如列表页没有「返回」的对象）就什么都不做，不会串到别的页面上去。
+     */
+    fun performGesture(gesture: SensorGesture) {
+        when (gesture.action) {
+            GestureAction.Exit -> context.findActivity()?.finishAndRemoveTask()
+            GestureAction.Tap -> gestureHolder.onTap?.invoke()
+            GestureAction.Back -> gestureHolder.onBack?.invoke()
+            GestureAction.ScrollDown -> gestureHolder.onScrollBy?.invoke(gesture.speed)
+            GestureAction.ScrollUp -> gestureHolder.onScrollBy?.invoke(-gesture.speed)
+        }
+    }
+
+    // 手势只在三个内容页里有意义，别的页面（设置、关于、录制中…）一律不检测。
+    val gesturePage = when (route) {
+        Route.Browser -> GesturePage.FileList
+        Route.Book -> GesturePage.Catalog
+        is Route.Chapter -> GesturePage.Reader
+        else -> null
+    }
+    // 当前页面此刻要检测的手势：总开关、启用页面、单个手势开关三个条件都满足才留下来。
+    val activeGestures = remember(sensorSettings, gesturePage) {
+        gesturePage?.let { sensorSettings.activeOn(it) } ?: emptyList()
+    }
+
+    val detector = remember(context) { TiltGestureDetector(context) }
+    val gestureHandler = rememberUpdatedState<(SensorGesture) -> Unit> { performGesture(it) }
+    // 传感器监听只注册一次，回调里读的永远是「最新那份」动作分发。
+    SideEffect { detector.onTrigger = { gesture -> gestureHandler.value(gesture) } }
+
+    // 应用有没有在前台。退到后台/表盘息屏（ON_PAUSE）时**立刻停检测**：
+    // 用户看不见的时候不该还在采样耗电，更不该在后台把手势动作执行出来
+    // （尤其是「退出」那种会 finishAndRemoveTask 的动作）。
+    val lifecycleOwner = remember(context) { context.findActivity() as? LifecycleOwner }
+    var resumed by remember(lifecycleOwner) {
+        mutableStateOf(
+            lifecycleOwner?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) ?: true,
+        )
+    }
+    DisposableEffect(lifecycleOwner) {
+        val owner = lifecycleOwner ?: return@DisposableEffect onDispose { }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> resumed = true
+                Lifecycle.Event.ON_PAUSE -> resumed = false
+                else -> Unit
+            }
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+
+    // 需要检测就注册传感器，不需要就立刻注销：这就是「非启用任何手势的页面立刻停止检测任务」，
+    // 也是总开关关掉、应用退到后台时的行为。
+    // 间隔一变也要重新注册（采样率是注册时定下的）。
+    DisposableEffect(activeGestures, sensorSettings.intervalMs, resumed) {
+        if (resumed && activeGestures.isNotEmpty()) {
+            detector.start(activeGestures, sensorSettings.intervalMs)
+        } else {
+            detector.stop()
+        }
+        onDispose { detector.stop() }
+    }
+
+    // 进入启用了手势的页面时提示一句：检测任务真的跑起来了，也就意味着在耗电。
+    LaunchedEffect(gesturePage, activeGestures.isNotEmpty()) {
+        if (gesturePage == null || activeGestures.isEmpty()) return@LaunchedEffect
+        Toast.makeText(context, "手势检测任务已启用（${gesturePage.label}）", Toast.LENGTH_SHORT).show()
     }
 
     /**
@@ -262,112 +386,213 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
     }
 
     XlReaderTheme {
-        when (val current = route) {
-            Route.Opening -> NoticeScreen(
-                title = "正在打开",
-                message = "正在读取传入的电子书…",
-            )
+        // 页面在这里登记自己支持的手势动作（BindGestureActions），根组件负责分发。
+        CompositionLocalProvider(LocalGestureActions provides gestureHolder) {
+            when (val current = route) {
+                Route.Opening -> NoticeScreen(
+                    title = "正在打开",
+                    message = "正在读取传入的电子书…",
+                )
 
-            Route.Permission -> PermissionScreen(
-                onOpenSettings = { openAllFilesAccessSettings(context) },
-                onRecheck = {
-                    if (hasAllFilesAccess()) route = Route.Browser
-                },
-            )
+                Route.Permission -> PermissionScreen(
+                    onOpenSettings = { openAllFilesAccessSettings(context) },
+                    onRecheck = {
+                        if (hasAllFilesAccess()) route = Route.Browser
+                    },
+                )
 
-            Route.Browser -> HomeScreen(
-                dirPath = browserDir,
-                onOpenDirectory = { browserDir = it },
-                onOpenBook = { path ->
-                    pendingPath = path
-                    bookState = BookState.Loading
-                    requestBook(path, BookAction.Prepare)
-                    route = Route.Book
-                },
-                onNavigateUp = {
-                    parentWithinRoot(File(browserDir))?.let { browserDir = it.absolutePath }
-                },
-                onOpenSettings = { route = Route.Settings },
-                onOpenAbout = { route = Route.About },
-                // 退出本应用：finishAndRemoveTask 会把整个任务结束并从最近任务列表里移除，
-                // 比只 finish 当前 Activity 更接近「退出」的字面意思。
-                onExitApp = { context.findActivity()?.finishAndRemoveTask() },
-            )
+                Route.Browser -> HomeScreen(
+                    dirPath = browserDir,
+                    onOpenDirectory = { browserDir = it },
+                    onOpenBook = { path ->
+                        pendingPath = path
+                        bookState = BookState.Loading
+                        requestBook(path, BookAction.Prepare)
+                        route = Route.Book
+                    },
+                    onNavigateUp = {
+                        parentWithinRoot(File(browserDir))?.let { browserDir = it.absolutePath }
+                    },
+                    onOpenSettings = { route = Route.Settings },
+                    onOpenAbout = { route = Route.About },
+                    // 退出本应用：finishAndRemoveTask 会把整个任务结束并从最近任务列表里移除，
+                    // 比只 finish 当前 Activity 更接近「退出」的字面意思。
+                    onExitApp = { context.findActivity()?.finishAndRemoveTask() },
+                )
 
-            Route.Book -> {
-                val fileName = pendingPath?.let { File(it).name } ?: ""
-                when (val state = bookState) {
-                    BookState.Loading -> NoticeScreen(
-                        title = "正在打开",
-                        message = "正在读取…\n$fileName",
-                    )
+                Route.Book -> {
+                    val fileName = pendingPath?.let { File(it).name } ?: ""
+                    when (val state = bookState) {
+                        BookState.Loading -> NoticeScreen(
+                            title = "正在打开",
+                            message = "正在读取…\n$fileName",
+                        )
 
-                    is BookState.Extracting -> ExtractingScreen(
-                        fileName = fileName,
-                        progress = state.progress,
-                    )
+                        is BookState.Extracting -> ExtractingScreen(
+                            fileName = fileName,
+                            progress = state.progress,
+                        )
 
-                    BookState.AskRefresh -> CachePromptScreen(
-                        fileName = fileName,
-                        onKeep = {
-                            pendingPath?.let { requestBook(it, BookAction.KeepCache) }
-                        },
-                        onRefresh = {
-                            pendingPath?.let { requestBook(it, BookAction.RefreshCache) }
-                        },
-                        onCancel = { route = Route.Browser },
-                    )
+                        BookState.AskRefresh -> CachePromptScreen(
+                            fileName = fileName,
+                            onKeep = {
+                                pendingPath?.let { requestBook(it, BookAction.KeepCache) }
+                            },
+                            onRefresh = {
+                                pendingPath?.let { requestBook(it, BookAction.RefreshCache) }
+                            },
+                            onCancel = { route = Route.Browser },
+                        )
 
-                    is BookState.Failed -> NoticeScreen(
-                        title = "打不开这本书",
-                        message = state.message,
-                        onAction = { route = Route.Browser },
-                    )
+                        is BookState.Failed -> NoticeScreen(
+                            title = "打不开这本书",
+                            message = state.message,
+                            onAction = { route = Route.Browser },
+                        )
 
-                    is BookState.Ready -> ChapterListScreen(
-                        book = state.book,
-                        onOpenChapter = { route = Route.Chapter(it) },
-                        onBack = { route = Route.Browser },
-                    )
+                        is BookState.Ready -> ChapterListScreen(
+                            book = state.book,
+                            onOpenChapter = { route = Route.Chapter(it) },
+                            onBack = { route = Route.Browser },
+                        )
+                    }
                 }
-            }
 
-            is Route.Chapter -> {
-                val state = bookState
-                if (state is BookState.Ready) {
-                    ChapterScreen(
-                        book = state.book,
-                        chapterIndex = current.index,
-                        preferences = preferences,
-                        onPreferencesChange = updatePreferences,
-                        onOpenChapter = { route = Route.Chapter(it) },
-                        onPositionChange = reportPosition,
-                        // 正文页点「上一章 / 下一章」或单击弹菜单时，让它立刻记一次进度。
-                        onSaveProgress = { saveProgressOnLeave(state.book, current.index) },
-                        onBackToList = { backToCatalog(state.book, current.index) },
-                        onBackToFileList = { backToFileList(state.book, current.index) },
+                is Route.Chapter -> {
+                    val state = bookState
+                    if (state is BookState.Ready) {
+                        ChapterScreen(
+                            book = state.book,
+                            chapterIndex = current.index,
+                            preferences = preferences,
+                            onPreferencesChange = updatePreferences,
+                            onOpenChapter = { route = Route.Chapter(it) },
+                            onPositionChange = reportPosition,
+                            // 正文页点「上一章 / 下一章」或单击弹菜单时，让它立刻记一次进度。
+                            onSaveProgress = { saveProgressOnLeave(state.book, current.index) },
+                            onBackToList = { backToCatalog(state.book, current.index) },
+                            onBackToFileList = { backToFileList(state.book, current.index) },
+                        )
+                    } else {
+                        NoticeScreen(
+                            title = "正在打开",
+                            message = "请稍候…",
+                            onAction = { route = Route.Browser },
+                        )
+                    }
+                }
+
+                Route.Settings -> SettingsScreen(
+                    preferences = preferences,
+                    onPreferencesChange = updatePreferences,
+                    onOpenSensorSettings = { route = Route.SensorSettings },
+                    onBack = { route = Route.Browser },
+                )
+
+                Route.SensorSettings -> if (sensorReady) {
+                    SensorSettingsScreen(
+                        settings = sensorSettings,
+                        onChange = updateSensorSettings,
+                        onAddGesture = { route = Route.SensorRecord(null) },
+                        onOpenGesture = { route = Route.SensorGestureEdit(it) },
+                        onOpenPages = { route = Route.SensorPages },
+                        onBack = { route = Route.Settings },
                     )
                 } else {
-                    NoticeScreen(
-                        title = "正在打开",
-                        message = "请稍候…",
-                        onAction = { route = Route.Browser },
+                    SensorPermissionScreen(
+                        onOpenSettings = { openAppSettings(context) },
+                        onRecheck = { sensorReady = hasAccelerometer(context) },
+                        onBack = { route = Route.Settings },
                     )
                 }
+
+                Route.SensorPages -> SensorPagesScreen(
+                    settings = sensorSettings,
+                    onChange = updateSensorSettings,
+                    onBack = { route = Route.SensorSettings },
+                )
+
+                is Route.SensorGestureEdit -> {
+                    val gesture = sensorSettings.gestures.firstOrNull { it.id == current.id }
+                    if (gesture == null) {
+                        // 删除之后又退回来时的兜底：不显示一个指向空气的详情页。
+                        NoticeScreen(
+                            title = "手势不在了",
+                            message = "这条手势已经被删掉了。",
+                            onAction = { route = Route.SensorSettings },
+                        )
+                    } else {
+                        SensorGestureDetailScreen(
+                            gesture = gesture,
+                            onChange = { updated ->
+                                updateSensorSettings(
+                                    sensorSettings.copy(
+                                        gestures = sensorSettings.gestures.map {
+                                            if (it.id == updated.id) updated else it
+                                        },
+                                    ),
+                                )
+                            },
+                            onRerecord = { route = Route.SensorRecord(gesture.id) },
+                            onDelete = {
+                                updateSensorSettings(
+                                    sensorSettings.copy(
+                                        gestures = sensorSettings.gestures
+                                            .filterNot { it.id == gesture.id },
+                                    ),
+                                )
+                                route = Route.SensorSettings
+                            },
+                            onBack = { route = Route.SensorSettings },
+                        )
+                    }
+                }
+
+                is Route.SensorRecord -> SensorGestureRecordScreen(
+                    intervalMs = sensorSettings.intervalMs,
+                    // 取消：新增的回手势列表，重录的回手势详情。
+                    onCancel = {
+                        route = current.id
+                            ?.let { Route.SensorGestureEdit(it) }
+                            ?: Route.SensorSettings
+                    },
+                    onRecorded = { range ->
+                        val existing = current.id
+                            ?.let { id -> sensorSettings.gestures.firstOrNull { it.id == id } }
+                        val target = (
+                            existing ?: SensorGesture(
+                                id = UUID.randomUUID().toString(),
+                                name = "手势 ${sensorSettings.gestures.size + 1}",
+                            )
+                            ).copy(
+                            minRoll = range.minRoll,
+                            maxRoll = range.maxRoll,
+                            minPitch = range.minPitch,
+                            maxPitch = range.maxPitch,
+                        )
+                        updateSensorSettings(
+                            sensorSettings.copy(
+                                gestures = if (existing == null) {
+                                    sensorSettings.gestures + target
+                                } else {
+                                    sensorSettings.gestures.map {
+                                        if (it.id == target.id) target else it
+                                    }
+                                },
+                            ),
+                        )
+                        // 录完直接进详情：名字默认是「手势 N」，动作默认「单击」，让用户自己改。
+                        route = Route.SensorGestureEdit(target.id)
+                    },
+                )
+
+                Route.About -> AboutScreen(
+                    onOpenLicenses = { route = Route.Licenses },
+                    onBack = { route = Route.Browser },
+                )
+
+                Route.Licenses -> LicensesScreen(onBack = { route = Route.About })
             }
-
-            Route.Settings -> SettingsScreen(
-                preferences = preferences,
-                onPreferencesChange = updatePreferences,
-                onBack = { route = Route.Browser },
-            )
-
-            Route.About -> AboutScreen(
-                onOpenLicenses = { route = Route.Licenses },
-                onBack = { route = Route.Browser },
-            )
-
-            Route.Licenses -> LicensesScreen(onBack = { route = Route.About })
         }
     }
 }
@@ -419,6 +644,27 @@ private fun materialize(context: Context, uri: Uri): File? {
         target.outputStream().use { sink -> source.copyTo(sink) }
     }
     return target
+}
+
+/**
+ * 跳到本应用的系统设置页。
+ *
+ * 传感器引导页用它：加速度计不需要运行时权限，但如果系统 / ROM 把传感器关了，
+ * 用户只能在这里检查（路径见那一页底部的提示）。
+ */
+private fun openAppSettings(context: Context) {
+    val intent = Intent(
+        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.fromParts("package", context.packageName, null),
+    )
+    val host = context.findActivity()
+    if (host != null) {
+        runCatching { host.startActivity(intent) }
+        return
+    }
+    // 兜底：调用点一定在 Activity 的 composition 内，正常走不到这里。
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
 }
 
 /**

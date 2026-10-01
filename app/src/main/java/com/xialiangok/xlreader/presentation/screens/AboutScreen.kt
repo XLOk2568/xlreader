@@ -39,7 +39,7 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "版本 1.0.2610.12 · Wear OS\n最低支持 Android 11（API 30）\n以下为GPT5.6L生成",
+                text = "版本 1.0.2610.14 · Wear OS\n最低支持 Android 11（API 30）\n以下为GPT5.6L生成",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -65,7 +65,10 @@ fun AboutScreen(
         item {
             Text(
                 text = "1性能优化\n" +
-                        "2菜单功能增加\n"+"3ui优化"+"\n4引用更好的",
+                        "2菜单功能增加\n"+
+                        "3ui优化（部分控件加入了防误触的代码）\n"+
+                        "4引用更好的Long\n"+
+                        "5新增手势功能",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),

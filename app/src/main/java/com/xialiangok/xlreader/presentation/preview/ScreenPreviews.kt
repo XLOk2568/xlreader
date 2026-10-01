@@ -5,6 +5,9 @@ import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import androidx.wear.compose.ui.tooling.preview.WearPreviewLargeRound
 import com.xialiangok.xlreader.data.ReaderPreferences
 import com.xialiangok.xlreader.data.epub.EpubBook
+import com.xialiangok.xlreader.data.sensor.GestureAction
+import com.xialiangok.xlreader.data.sensor.SensorGesture
+import com.xialiangok.xlreader.data.sensor.SensorSettings
 import com.xialiangok.xlreader.presentation.screens.AboutScreen
 import com.xialiangok.xlreader.presentation.screens.ChapterListScreen
 import com.xialiangok.xlreader.presentation.screens.ChapterScreen
@@ -12,6 +15,9 @@ import com.xialiangok.xlreader.presentation.screens.HomeScreen
 import com.xialiangok.xlreader.presentation.screens.LicensesScreen
 import com.xialiangok.xlreader.presentation.screens.PermissionScreen
 import com.xialiangok.xlreader.presentation.screens.ReaderMenuOverlay
+import com.xialiangok.xlreader.presentation.screens.SensorGestureDetailScreen
+import com.xialiangok.xlreader.presentation.screens.SensorPermissionScreen
+import com.xialiangok.xlreader.presentation.screens.SensorSettingsScreen
 import com.xialiangok.xlreader.presentation.screens.SettingsScreen
 import com.xialiangok.xlreader.presentation.theme.XlReaderTheme
 import java.io.File
@@ -113,6 +119,73 @@ fun SettingsScreenPreview() {
         SettingsScreen(
             preferences = ReaderPreferences(),
             onPreferencesChange = {},
+            onOpenSensorSettings = {},
+            onBack = {},
+        )
+    }
+}
+
+@WearPreviewDevices
+@Composable
+fun SensorSettingsScreenPreview() {
+    XlReaderTheme {
+        SensorSettingsScreen(
+            settings = SensorSettings(
+                gestures = listOf(
+                    SensorGesture(
+                        id = "demo-1",
+                        name = "翻页",
+                        action = GestureAction.ScrollDown,
+                        minRoll = 28f,
+                        maxRoll = 46f,
+                        minPitch = -6f,
+                        maxPitch = 4f,
+                    ),
+                    SensorGesture(
+                        id = "demo-2",
+                        name = "菜单",
+                        action = GestureAction.Tap,
+                        minRoll = -12f,
+                        maxRoll = -4f,
+                        minPitch = 22f,
+                        maxPitch = 38f,
+                    ),
+                ),
+            ),
+            onChange = {},
+            onAddGesture = {},
+            onOpenGesture = {},
+            onOpenPages = {},
+            onBack = {},
+        )
+    }
+}
+
+@WearPreviewDevices
+@Composable
+fun SensorPermissionScreenPreview() {
+    XlReaderTheme {
+        SensorPermissionScreen(onOpenSettings = {}, onRecheck = {}, onBack = {})
+    }
+}
+
+@WearPreviewDevices
+@Composable
+fun SensorGestureDetailScreenPreview() {
+    XlReaderTheme {
+        SensorGestureDetailScreen(
+            gesture = SensorGesture(
+                id = "demo-1",
+                name = "翻页",
+                action = GestureAction.ScrollDown,
+                minRoll = 28f,
+                maxRoll = 46f,
+                minPitch = -6f,
+                maxPitch = 4f,
+            ),
+            onChange = {},
+            onRerecord = {},
+            onDelete = {},
             onBack = {},
         )
     }
