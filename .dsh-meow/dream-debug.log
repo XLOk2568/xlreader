@@ -50,3 +50,6 @@
 [2026-10-01T04:33:01.483Z] check sid=a0894792 active=false idle=6145s
 [2026-10-01T04:33:01.486Z] check sid=71443425 active=false idle=4568s
 [2026-10-01T04:33:01.488Z] check sid=5e6ca47b active=false idle=3029s
+[2026-10-01T10:33:28.030Z] pre-step first pid=8376 sid=5a584a58 priorUser=0 userMsgs=1
+[2026-10-01T10:37:59.112Z] hit-chain pid=8376 sid=5a584a58 textLen=6 hit=yes
+[2026-10-01T10:38:34.195Z] turn-stopping pid=8376 sid=5a584a58 reason=none wasDream=false

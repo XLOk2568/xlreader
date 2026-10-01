@@ -394,6 +394,10 @@ AndroidX graphics-path / shapes），**全部为 Apache License 2.0**。
 8. **正文页关掉右侧的滚动指示条**（`showScrollIndicator = false`）：`ScreenScaffold` 默认会在
    屏幕右缘画一条 `ScrollIndicator`，阅读时它贴着正文，关掉后正文两侧不留装饰。
    其余列表页保持默认（那里正需要它提示还有多少内容可滚）。
+9. **关掉系统自带的标题栏**：`styles.xml` 的 `MainActivityTheme` 把 `windowNoTitle` 设为 `true`、
+   `windowActionBar` 设为 `false`（启动窗口 `MainActivityTheme.Starting` 也带上这两项）。
+   `Theme.DeviceDefault` 在手机等非手表设备上默认带 ActionBar，会在左上角画出应用名
+   「XLreader」，看着像一条顶部标题栏；界面全部由 Compose 自己画，不需要它。
 
 > 没有跟着改的两处：设置页的 `SwitchButton`（它是开关不是按钮，轨道用的是另一套颜色槽）、
 > 以及文件/章节列表里的 `Card`（容器底色仍是 `#121212`）。需要的话也可以统一。
