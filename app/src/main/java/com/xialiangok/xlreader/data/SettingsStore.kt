@@ -51,8 +51,23 @@ class SettingsStore(context: Context) {
         }
     }
 
+    /** 上次浏览的目录；没记录过（或那本目录已经被删了）返回 null。 */
+    fun readBrowserDir(): String? = prefs.getString(KEY_BROWSER_DIR, null)
+
+    /**
+     * 记下当前浏览的目录，下次启动直接回到这里。
+     *
+     * 用 `apply()`（`edit {}` 的默认行为）异步落盘：进出目录、切页面、退出应用时都会写一次，
+     * 不能在这条路径上做同步 IO。
+     */
+    fun saveBrowserDir(path: String) {
+        prefs.edit { putString(KEY_BROWSER_DIR, path) }
+    }
+
     companion object {
         private const val PREFS_NAME = "xlreader_settings"
+        // 文件浏览器上次停留在哪个目录（应用重启后从它继续，而不是回到存储根）。
+        private const val KEY_BROWSER_DIR = "browser_dir"
         // 字号曾经是 0..2 的档位，存的是另一套键；换成磅值后直接换个键，
         // 免得旧的 "0/1/2" 被当成 1 磅、2 磅读出来（那是根本看不见的字）。
         private const val KEY_FONT = "font_size"

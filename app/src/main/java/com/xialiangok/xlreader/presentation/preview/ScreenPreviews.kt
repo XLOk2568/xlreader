@@ -70,7 +70,7 @@ fun PermissionScreenPreview() {
 @Composable
 fun ChapterListScreenPreview() {
     XlReaderTheme {
-        ChapterListScreen(book = previewBook, onOpenChapter = {}, onBack = {})
+        ChapterListScreen(book = previewBook, onOpenChapter = {}, onBack = {}, onBackToFileList = {})
     }
 }
 
@@ -92,8 +92,10 @@ fun ChapterScreenPreview() {
             onOpenChapter = {},
             onPositionChange = {},
             onSaveProgress = {},
-            onBackToList = {},
+            onOpenCatalog = {},
             onBackToFileList = {},
+            menuVisible = false,
+            onMenuVisibleChange = {},
         )
     }
 }
@@ -105,7 +107,7 @@ fun ReaderMenuPreview() {
         ReaderMenuOverlay(
             preferences = ReaderPreferences(),
             onPreferencesChange = {},
-            onBackToCatalog = {},
+            onOpenCatalog = {},
             onBackToFileList = {},
             onDismiss = {},
         )

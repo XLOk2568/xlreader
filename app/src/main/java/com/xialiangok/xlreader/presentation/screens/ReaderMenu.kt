@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -84,9 +85,12 @@ private val TEXT_BRIGHTNESS_STEPS: List<Float> = buildList {
  * 面板铺满整屏，**空白处的单击等于关闭菜单**；按钮、开关、步进器会消费掉自己的点击，
  * 所以不会误关。
  *
- * @param onBackToCatalog 返回章节目录，和正文底部的「返回目录」走同一条路
+ * @param onOpenCatalog 打开章节目录，和正文底部的「打开目录」走同一条路
  *   （因此进度会在同一条路上落盘、常亮与屏幕亮度也会随正文页一起还原）。
- *   放在这里是为了不用滚到本章末尾才能离开这一章。
+ *   放在这里是为了不用滚到本章末尾才能翻目录。这是「打开」不是「返回」：
+ *   在目录里再返回一次是回到这一章，不会一路退出这本书。
+ *   菜单开着这个状态记在根组件上、这里刻意不清掉它，所以从目录返回时
+ *   回到的是**这个菜单**（而不是直接落回正文）；想带着菜单回来就得从这里进目录。
  * @param onBackToFileList 返回文件列表，和正文底部的「返回文件列表」走同一条路。
  *   想换一本书时不用说先回目录、再滚到目录页最底下点返回。
  */
@@ -94,7 +98,7 @@ private val TEXT_BRIGHTNESS_STEPS: List<Float> = buildList {
 fun ReaderMenuOverlay(
     preferences: ReaderPreferences,
     onPreferencesChange: (ReaderPreferences) -> Unit,
-    onBackToCatalog: () -> Unit,
+    onOpenCatalog: () -> Unit,
     onBackToFileList: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -129,25 +133,28 @@ fun ReaderMenuOverlay(
             Button(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,          // 直角
                 colors = readerButtonColors(),
             ) {
-                Text("关闭菜单")
+                Text(text = "关闭菜单", textAlign =TextAlign.Center)
             }
-            // 紧挨着「关闭菜单」：想离开这一章时，不必先关掉菜单再滚到本章末尾去找那个按钮。
+            // 紧挨着「关闭菜单」：想翻目录、换章时，不必先关掉菜单再滚到本章末尾去找那个按钮。
             Button(
-                onClick = onBackToCatalog,
+                onClick = onOpenCatalog,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("返回目录")
+                Text(text = "打开目录", textAlign =TextAlign.Center)
             }
-            // 紧挨着「返回目录」：想换一本书时，一步就能回到文件列表。
+            // 紧挨着「打开目录」：想换一本书时，一步就能回到文件列表。
             Button(
                 onClick = onBackToFileList,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,          // 直角
                 colors = readerButtonColors(),
             ) {
-                Text("返回文件列表")
+                Text(text = "返回文件列表", textAlign =TextAlign.Center)
             }
             Spacer(Modifier.height(4.dp))
             // ---- 字号：和亮度、RGB 一样用「− / ＋」一次走一磅，直接显示磅值 ----
@@ -261,6 +268,7 @@ fun ReaderMenuOverlay(
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,          // 直角
                 colors = readerButtonColors(),
             ) {
                 Text("文字颜色恢复默认")

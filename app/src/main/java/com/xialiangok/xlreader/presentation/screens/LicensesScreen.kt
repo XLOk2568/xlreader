@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Button
@@ -35,7 +37,15 @@ fun LicensesScreen(onBack: () -> Unit) {
     BackHandler(onBack = onBack)
 
     WearListScreen {
-        item { ListHeader { Text("开源许可") } }
+        item {
+            ListHeader {
+                Text(
+                    text = "开源许可",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
         item {
             Text(
                 text = "本应用不联网、不采集数据。以下项目随应用一同分发，" +
@@ -43,6 +53,7 @@ fun LicensesScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
             )
         }
 
@@ -66,7 +77,7 @@ fun LicensesScreen(onBack: () -> Unit) {
 
         item { Spacer(Modifier.height(10.dp)) }
         item {
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
+            Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape = RectangleShape,colors = readerButtonColors()) {
                 Text("返回")
             }
         }

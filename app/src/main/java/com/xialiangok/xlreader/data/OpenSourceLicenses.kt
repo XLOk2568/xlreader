@@ -30,7 +30,12 @@ val bundledOpenSourceProjects: List<OpenSourceProject> = listOf(
     OpenSourceProject(
         name ="xlreader" ,
         license="Apache License 2.0",
-        note="https://github.com/XLOk2568/xlerader",
+        note="https://github.com/XLOk2568/xlreader",
+    ),
+    OpenSourceProject(
+        name = "WearFiles",
+        license = "Apache-2.0",
+        note = "https://github.com/dertefter/WearFiles"
     ),
     OpenSourceProject(
         name = "AndroidX / Jetpack",

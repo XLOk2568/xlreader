@@ -46,13 +46,19 @@ private const val RESUME_KEY = "resume"
  *
  * 如果 `history.txt` 里有上次读到的位置，顶部会出现「继续阅读」。
  *
+ * 这一页是正文页「打开目录」打开的：所以**返回 = 关掉目录、回到进来时那一章**，
+ * 不会一路退出这本书、落到文件列表上；要回文件列表用页面底部的「返回文件列表」。
+ *
  * @param onOpenChapter 打开第 N 章。
+ * @param onBack 关掉目录，回到进来时那一章。
+ * @param onBackToFileList 返回文件列表（明确要离开这本书时才走这里）。
  */
 @Composable
 fun ChapterListScreen(
     book: EpubBook,
     onOpenChapter: (Int) -> Unit,
     onBack: () -> Unit,
+    onBackToFileList: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
 
@@ -76,7 +82,7 @@ fun ChapterListScreen(
     val scope = rememberCoroutineScope()
 
     // 体感手势：单击 = 打开屏幕上正中央的那一项（含「继续阅读」卡片），
-    // 返回 = 退回文件列表，翻页 = 按条目滚动。
+    // 返回 = 关掉目录、回到进来时那一章（和系统返回手势同一条路），翻页 = 按条目滚动。
     BindGestureActions(
         onTap = {
             val key = centeredItemKey(listState) as? String ?: return@BindGestureActions
@@ -179,7 +185,7 @@ fun ChapterListScreen(
 
         item { Spacer(Modifier.height(10.dp)) }
         item {
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
+            Button(onClick = onBackToFileList, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
                 Text("返回文件列表")
             }
         }

@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
@@ -38,9 +40,24 @@ fun SettingsScreen(
     BackHandler(onBack = onBack)
 
     WearListScreen {
-        item { ListHeader { Text("设置") } }
-
-        item { ListSubHeader { Text("阅读排版") } }
+        item {
+            ListHeader {
+                Text(
+                    text = "设置",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        item {
+            ListSubHeader {
+                Text(
+                    text = "阅读排版",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
         item {
             // 字号是一串连续的磅值（1..999），没法点击循环，
             // 所以和阅读菜单里一样用「− / ＋」步进（按住可连发）。
@@ -77,8 +94,15 @@ fun SettingsScreen(
                 },
             )
         }
-
-        item { ListSubHeader { Text("显示与动效") } }
+        item {
+            ListSubHeader {
+                Text(
+                    text = "显示",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
         item {
             // 动效是全应用固定关掉的（见 theme/Theme.kt），所以这里只作展示：
             // 永远显示打开、不允许再点（关闭它也没用，反而会让人以为界面会动起来）。
@@ -100,14 +124,22 @@ fun SettingsScreen(
                 Text("阅读时常亮")
             }
         }
-
-        item { ListSubHeader { Text("体感手势(Bate)") } }
+        item {
+            ListSubHeader {
+                Text(
+                    text = "体感手势(测试)",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
         item {
             // 传感器设置是独立的一份数据（手势列表 + 检测间隔 + 启用页面），
             // 内容比这一页多得多，所以单独开一页，这里只留入口。
             Button(
                 onClick = onOpenSensorSettings,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
                 Text("传感器设置")
@@ -119,14 +151,15 @@ fun SettingsScreen(
                 text = FONT_HINT,
                 style = MaterialTheme.typography.bodyExtraSmall,
                 modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
             )
         }
-
         item { Spacer(Modifier.height(10.dp)) }
         item {
             Button(
                 onClick = onBack,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
                 Text("完成")

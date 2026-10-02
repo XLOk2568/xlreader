@@ -144,10 +144,40 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
 
     val context = LocalContext.current
     val rootPath = remember { defaultRootPath() }
-    var browserDir by remember { mutableStateOf(rootPath) }
+    // 上次退出时停在哪个目录就从哪儿继续（目录被删了、或路径不在存储内就退回根目录）。
+    var browserDir by remember {
+        mutableStateOf(
+            store.readBrowserDir()
+                ?.takeIf { it.startsWith(rootPath) && File(it).isDirectory }
+                ?: rootPath,
+        )
+    }
+
+    /** 换目录：内存里换掉的同时立刻记盘，切到别的页面或直接退出应用都不会丢这个位置。 */
+    fun setBrowserDir(path: String) {
+        browserDir = path
+        store.saveBrowserDir(path)
+    }
 
     var pendingPath by remember { mutableStateOf<String?>(null) }
     var bookState by remember { mutableStateOf<BookState>(BookState.Loading) }
+
+    /**
+     * 从正文页「打开目录」进来时所在的那一章；目录页里的返回就是回到它。
+     *
+     * 目录是「打开」而不是「返回」：在目录里退一步只是关掉目录，不该一路退出这本书
+     * （那等于把书关了、落到文件列表上）。要回文件列表得用目录页底部的那个按钮。
+     */
+    var catalogReturnChapter by remember { mutableStateOf<Int?>(null) }
+
+    /**
+     * 阅读界面的快捷菜单是不是开着。
+     *
+     * 状态放在根组件而不是正文页里：从菜单「打开目录」时**不清掉它**，
+     * 于是在目录里返回时回到的还是那个菜单，而不是直接落回正文；
+     * 从正文底部「打开目录」进去时它本来是关着的，返回也就直接回正文。
+     */
+    var readerMenuVisible by remember { mutableStateOf(false) }
     var request by remember { mutableStateOf<BookRequest?>(null) }
     var requestToken by remember { mutableIntStateOf(0) }
 
@@ -165,6 +195,8 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
         // 换书时把上一次的位置报告清掉，免得刚进新书、正文页还没上报时
         // 拿上一本书的位置写进新书的 history.txt。
         lastPosition = null
+        // 上一本书的阅读菜单状态（从菜单进目录、留在目录里返回）同样不能带过来。
+        readerMenuVisible = false
         requestToken += 1
         request = BookRequest(path, action, requestToken)
     }
@@ -274,7 +306,7 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
      * 把「现在读到哪一条」立刻落盘一次。
      *
      * 写 history.txt 的时机一共四处：加载完一章 500ms（仅一次）、单击正文弹出菜单、切换章节、
-     * 离开正文页；后三处都调到这里，返回目录 / 返回文件列表 / 系统返回手势也走同一笔，
+     * 离开正文页；后三处都调到这里，打开目录 / 返回文件列表 / 系统返回手势也走同一笔，
      * 所以从哪个口子离开都一样。**滚动本身不写盘。**
      *
      * 落盘用根组件的作用域：正文页自己的协程活不过这一次切页（一离开组合就被取消），
@@ -290,15 +322,28 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
             }
     }
 
-    /** 从正文页返回章节目录：先落盘，再切页面。 */
-    fun backToCatalog(book: EpubBook, chapterIndex: Int) {
+    /** 从正文页打开章节目录：先落盘，再切页面，并记下是从哪一章进来的。 */
+    fun openCatalog(book: EpubBook, chapterIndex: Int) {
         saveProgressOnLeave(book, chapterIndex)
+        catalogReturnChapter = chapterIndex
         route = Route.Book
+    }
+
+    /**
+     * 从目录页返回：回到打开目录时所在的那一章（正常走不到「没有来路」那一步）。
+     *
+     * 这里**不动** [readerMenuVisible]：若是从阅读菜单里进的目录，它还是 true，
+     * 于是返回时正文页上的那个菜单重新出现，而不是直接落回正文。
+     */
+    fun closeCatalog() {
+        route = catalogReturnChapter?.let { Route.Chapter(it) } ?: Route.Browser
     }
 
     /** 从正文页返回文件列表（正文里的按钮与系统返回手势）：同样先落盘。 */
     fun backToFileList(book: EpubBook, chapterIndex: Int) {
         saveProgressOnLeave(book, chapterIndex)
+        // 已经离开正文页了，菜单状态留着会让下一本书一进来就弹菜单。
+        readerMenuVisible = false
         route = Route.Browser
     }
 
@@ -306,7 +351,7 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
      * 解析完直接进正文页。
      *
      * 打开一本书的意图就是接着读，所以不再先停在目录页等用户再点一次；
-     * 要看目录、换章，用正文页里的「返回目录」。
+     * 要看目录、换章，用正文页里的「打开目录」（打开后返回只是关掉目录，仍是这本书）。
      * 解压 / 询问缓存 / 重新解压三条路最后都汇到这里。
      */
     suspend fun openForReading(file: File) {
@@ -403,21 +448,26 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
 
                 Route.Browser -> HomeScreen(
                     dirPath = browserDir,
-                    onOpenDirectory = { browserDir = it },
+                    onOpenDirectory = { setBrowserDir(it) },
                     onOpenBook = { path ->
                         pendingPath = path
+                        // 换书：上一本书「打开目录时在第几章」不能带到这一本上来。
+                        catalogReturnChapter = null
                         bookState = BookState.Loading
                         requestBook(path, BookAction.Prepare)
                         route = Route.Book
                     },
                     onNavigateUp = {
-                        parentWithinRoot(File(browserDir))?.let { browserDir = it.absolutePath }
+                        parentWithinRoot(File(browserDir))?.let { setBrowserDir(it.absolutePath) }
                     },
                     onOpenSettings = { route = Route.Settings },
                     onOpenAbout = { route = Route.About },
                     // 退出本应用：finishAndRemoveTask 会把整个任务结束并从最近任务列表里移除，
                     // 比只 finish 当前 Activity 更接近「退出」的字面意思。
-                    onExitApp = { context.findActivity()?.finishAndRemoveTask() },
+                    onExitApp = {
+                        store.saveBrowserDir(browserDir)
+                        context.findActivity()?.finishAndRemoveTask()
+                    },
                 )
 
                 Route.Book -> {
@@ -452,8 +502,19 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
 
                         is BookState.Ready -> ChapterListScreen(
                             book = state.book,
-                            onOpenChapter = { route = Route.Chapter(it) },
-                            onBack = { route = Route.Browser },
+                            // 在目录里直接挑了别的章节：这是「打开某一章」，不是「关掉目录」，
+                            // 所以菜单状态一并清掉，别让菜单莫名其妙地弹出来。
+                            onOpenChapter = {
+                                readerMenuVisible = false
+                                route = Route.Chapter(it)
+                            },
+                            // 目录是「打开」的：返回 = 关掉目录、回到进来时那一章，不退到文件列表。
+                            // 从阅读菜单进来的话，readerMenuVisible 还是 true，于是回到那个菜单。
+                            onBack = { closeCatalog() },
+                            onBackToFileList = {
+                                readerMenuVisible = false
+                                route = Route.Browser
+                            },
                         )
                     }
                 }
@@ -470,8 +531,10 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                             onPositionChange = reportPosition,
                             // 正文页点「上一章 / 下一章」或单击弹菜单时，让它立刻记一次进度。
                             onSaveProgress = { saveProgressOnLeave(state.book, current.index) },
-                            onBackToList = { backToCatalog(state.book, current.index) },
+                            onOpenCatalog = { openCatalog(state.book, current.index) },
                             onBackToFileList = { backToFileList(state.book, current.index) },
+                            menuVisible = readerMenuVisible,
+                            onMenuVisibleChange = { readerMenuVisible = it },
                         )
                     } else {
                         NoticeScreen(

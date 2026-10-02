@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -119,14 +120,15 @@ fun HomeScreen(
                         "$folderCount 个文件夹 · $bookCount 本电子书"
                     },
                     style = MaterialTheme.typography.bodyExtraSmall,
+                    textAlign = TextAlign.Center
                 )
             }
         }
 
         if (parent != null) {
             item {
-                Button(onClick = onNavigateUp, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
-                    Text("↑ 上一级")
+                Button(onClick = onNavigateUp, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors()) {
+                    Text(text = "上一级", textAlign = TextAlign.Center)
                 }
             }
         }
@@ -153,21 +155,21 @@ fun HomeScreen(
             )
         }
 
-        item { ListSubHeader { Text("其他") } }
+        item { ListSubHeader { Text(text = "其他", textAlign =TextAlign.Center) } }
         item {
             // 单击这个子按钮就真的退出：结束 Activity + 从最近任务里移除，不是跳去设置页。
-            Button(onClick = onExitApp, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
-                Text("退出本应用")
+            Button(onClick = onExitApp, modifier = Modifier.fillMaxWidth(), shape = RectangleShape,colors = readerButtonColors()) {
+                Text(text ="退出本应用", textAlign =TextAlign.Center)
             }
         }
         item {
-            Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
-                Text("设置")
+            Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors()) {
+                Text(text ="设置", textAlign =TextAlign.Center)
             }
         }
         item {
-            Button(onClick = onOpenAbout, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
-                Text("关于")
+            Button(onClick = onOpenAbout, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors()) {
+                Text(text ="关于", textAlign =TextAlign.Center)
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
