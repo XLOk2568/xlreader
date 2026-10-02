@@ -60,3 +60,9 @@
 [2026-10-01T15:42:28.900Z] turn-stopping pid=4044 sid=4168cb78 reason=none wasDream=false
 [2026-10-01T15:44:13.110Z] hit-chain pid=4044 sid=4168cb78 textLen=59 hit=yes
 [2026-10-01T15:46:40.739Z] turn-stopping pid=4044 sid=4168cb78 reason=none wasDream=false
+[2026-10-01T23:53:40.674Z] pre-step first pid=6936 sid=5e793c38 priorUser=0 userMsgs=1
+[2026-10-01T23:54:49.174Z] turn-stopping pid=6936 sid=5e793c38 reason=none wasDream=false
+[2026-10-02T00:07:03.120Z] pre-step first pid=6936 sid=de913a36 priorUser=0 userMsgs=1
+[2026-10-02T00:10:11.734Z] turn-stopping pid=6936 sid=de913a36 reason=none wasDream=false
+[2026-10-02T00:19:51.217Z] pre-step first pid=6936 sid=4b70cbff priorUser=0 userMsgs=1
+[2026-10-02T00:22:07.247Z] turn-stopping pid=6936 sid=4b70cbff reason=none wasDream=false
