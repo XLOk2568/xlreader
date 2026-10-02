@@ -5,6 +5,9 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 
 /**
  * 这台设备能不能用加速度计。
@@ -27,8 +30,14 @@ fun hasAccelerometer(context: Context): Boolean {
  * **按设置里的检测间隔采样**（默认 200ms ≈ 5Hz）、以及**不需要的时候立刻注销**
  * （总开关关掉、当前页面没启用手势、手势全被单独关掉，都走 [stop]）。
  *
- * 同一姿势只触发一次：命中后先记进 [fired]，要等角度离开范围才重新武装，
- * 否则一直保持那个姿势就会每 200ms 触发一下。
+ * 采样间隔是注册时交给框架的**建议值**，但很多设备（尤其手表）按固定 ODR 汇报、这个建议
+ * 根本传不下去，所以这里**再用 [dueSampleTimeMs] 自己节流一次** —— 设置里的间隔必须说了算，
+ * 否则「每个检测周期触发一次」实际变成「每个传感器回调触发一次」。
+ *
+ * **刻意不去重**（用户口径「每个检测间隔都触发」）：只要当前角度还落在某个手势的范围里，
+ * 每个检测周期都会执行一次 —— 所以摆着不动时，翻页类手势会连续滚、单击类会反复开合。
+ * 命中多条时按 [MultiGestureMode] 执行：默认只认列表里最靠前的那条；
+ * 打开「允许多个手势」后，可以一拍全执行，也可以按顺序逐条执行（相邻两条隔 20ms）。
  */
 class TiltGestureDetector(context: Context) : SensorEventListener {
 
@@ -37,12 +46,20 @@ class TiltGestureDetector(context: Context) : SensorEventListener {
     private val accelerometer: Sensor? =
         sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
-    /** 已经触发过、还没离开范围的手势 id。 */
-    private val fired = mutableSetOf<String>()
     private val filtered = FloatArray(3)
     private var primed = false
 
     private var gestures: List<SensorGesture> = emptyList()
+    private var intervalMs = SensorSettings.DEFAULT_INTERVAL_MS
+
+    /** 命中多条时的执行方式；null = 只跑第一个命中的。 */
+    private var mode: MultiGestureMode? = null
+
+    /** 「按顺序执行」时用来把同一拍里的第 2、3… 条手势隔 20ms 依次投递出去。 */
+    private val handler = Handler(Looper.getMainLooper())
+
+    /** 上一次真正做判定的时刻（[SystemClock.elapsedRealtime] 毫秒）；负数表示还没采过。 */
+    private var lastSampleMs = -1L
 
     /** 命中手势时回调（传感器事件在主线程派发）。 */
     var onTrigger: ((SensorGesture) -> Unit)? = null
@@ -50,24 +67,34 @@ class TiltGestureDetector(context: Context) : SensorEventListener {
     /** 手表上有没有加速度计。没有就不必折腾了。 */
     val available: Boolean get() = accelerometer != null
 
-    /** 需要检测的手势列表（已经过滤掉被关掉的），以及采样间隔。 */
-    fun start(gestures: List<SensorGesture>, intervalMs: Int) {
+    /** 需要检测的手势列表（已经过滤掉被关掉的）、采样间隔，以及多手势的执行方式。 */
+    fun start(gestures: List<SensorGesture>, intervalMs: Int, mode: MultiGestureMode?) {
         val sensor = accelerometer ?: return
         this.gestures = gestures
-        fired.clear()
+        this.intervalMs = intervalMs
+        this.mode = mode
         primed = false
-        // registerListener 的第三个参数是微秒。
+        // 上一轮「按顺序执行」还没投递完的，重新开始前一律丢掉。
+        handler.removeCallbacksAndMessages(null)
+        lastSampleMs = -1L
+        // registerListener 的第三个参数是微秒，只是建议值，真正的节流在 onSensorChanged 里。
         sensorManager.registerListener(this, sensor, intervalMs * 1000)
     }
 
-    /** 注销监听。重复调用是安全的，切页面时不必自己判断有没有在跑。 */
+    /** 注销监听。重复调用是安全的，切页面时自己不必判断有没有在跑。 */
     fun stop() {
         sensorManager.unregisterListener(this)
+        // 排队中的后续手势也要清掉：已经离开这一页了，不该隔 20ms 再补一刀。
+        handler.removeCallbacksAndMessages(null)
         gestures = emptyList()
-        fired.clear()
     }
 
     override fun onSensorChanged(event: SensorEvent) {
+        // 没到下一个检测间隔就先不采（框架给的速率可能比设置快很多）。
+        val due = dueSampleTimeMs(SystemClock.elapsedRealtime(), lastSampleMs, intervalMs)
+            ?: return
+        lastSampleMs = due
+
         val values = event.values
         if (!primed) {
             // 第一个点直接作为滤波初值，免得从 0 慢慢爬上来。
@@ -84,14 +111,27 @@ class TiltGestureDetector(context: Context) : SensorEventListener {
         val roll = tiltRoll(filtered[0], filtered[2])
         val pitch = tiltPitch(filtered[1], filtered[2])
 
-        // 同时落进多个范围时只认列表里最靠前的那个，一次姿势只出一个动作。
-        val matched = gestures.firstOrNull { it.matches(roll, pitch) }
-        if (matched == null) {
-            fired.clear()
-            return
+        // 当前角度落在谁的范围里就执行谁；不去重，下一个检测间隔还可以再执行一次。
+        // 命中多条时：默认只跑第一个；打开多手势后按设置里的方式全跑或按顺序轮着跑。
+        val matched = gestures.filter { it.matches(roll, pitch) }
+        when (mode) {
+            null -> matched.firstOrNull()?.let { onTrigger?.invoke(it) }
+
+            MultiGestureMode.Simultaneous -> matched.forEach { onTrigger?.invoke(it) }
+
+            // 逐条执行、相邻两条隔 20ms：第一条当场走，其余的排到主线程队列里。
+            // 微间隔是用户口径（动作都是瞬时的，全塞在同一瞬间就分不出先后）。
+            MultiGestureMode.Sequential -> matched.forEachIndexed { index, gesture ->
+                if (index == 0) {
+                    onTrigger?.invoke(gesture)
+                } else {
+                    handler.postDelayed(
+                        { onTrigger?.invoke(gesture) },
+                        SensorSettings.MULTI_SEQUENCE_GAP_MS * index,
+                    )
+                }
+            }
         }
-        if (fired.add(matched.id)) onTrigger?.invoke(matched)
-        fired.retainAll(setOf(matched.id))
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit

@@ -48,7 +48,7 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "版本 1.0.2610.24 · Wear OS\n最低支持 Android 11（API 30）\n以下为GPT5.6L生成",
+                text = "版本 1.0.2610.28 · Wear OS\n最低支持 Android 11（API 30）\n以下为GPT5.6L生成",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -78,7 +78,8 @@ fun AboutScreen(
             Text(
                 text = "1.增加保持上次打开Path功能\n"+
                         "2.修改目录逻辑\n"+
-                        "3.修改部分ui",
+                        "3.修改部分ui\n"+
+                        "4.修复手势和优化手势体感",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),

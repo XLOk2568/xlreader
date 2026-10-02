@@ -3,6 +3,7 @@ package com.xialiangok.xlreader.data.sensor
 import androidx.compose.runtime.Immutable
 import kotlin.math.atan2
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
  * 体感手势能执行的动作。
@@ -37,10 +38,26 @@ enum class GesturePage(val label: String) {
 }
 
 /**
- * 一个录制好的体感手势：一个倾斜姿势 + 一个动作。
+ * 一次采样里同时命中多条手势时怎么执行。
+ *
+ * 只在 [SensorSettings.multiGesture] 打开后才有意义：关掉时只跑列表里最靠前的那一条。
+ */
+enum class MultiGestureMode(val label: String) {
+    /** 这一拍里命中的每一条都执行一遍。 */
+    Simultaneous("同时执行"),
+
+    /** 同一拍里按列表顺序逐条执行，相邻两条隔 [SensorSettings.MULTI_SEQUENCE_GAP_MS]。 */
+    Sequential("按顺序执行"),
+}
+
+/**
+ * 一个体感手势：一个角度范围 + 一个动作。
  *
  * 只保存**最大和最小的角度**（roll 横滚 / pitch 俯仰各一对），判定时再按范围放宽一点容差，
  * 所以存储里就是四个数字，人眼可读、也方便以后换判定模型。
+ *
+ * 录制只是给这组数字一组初值：详情页里可以像字号那样按 **±1° 手改**，
+ * 检测一律以这四个数字为准（不再区分「录的」还是「填的」）。
  */
 @Immutable
 data class SensorGesture(
@@ -60,6 +77,13 @@ data class SensorGesture(
         const val MIN_SPEED = 1
         const val MAX_SPEED = 50
         const val DEFAULT_SPEED = 6
+
+        /** 角度能填的范围，与 [tiltRoll] / [tiltPitch] 的值域一致（atan2 的结果）。 */
+        const val MIN_ANGLE_DEG = -180f
+        const val MAX_ANGLE_DEG = 180f
+
+        /** 手改角度时一次走 1°（和字号步进一样：精确优先，要调大范围就按住连发）。 */
+        const val ANGLE_STEP_DEG = 1f
     }
 }
 
@@ -70,6 +94,9 @@ data class SensorGesture(
  * @param intervalMs 检测间隔（毫秒）。**所有手势共用一个**，就是传感器回调的周期。
  * @param pages     在哪些页面启用手势。不在列表里的页面一进去就不注册传感器。
  * @param gestures  录制好的手势列表。
+ * @param multiGesture 多个手势同时命中时是否全部执行。**默认关**：只跑列表里第一个命中的，
+ *   这也是一直以来的行为。
+ * @param multiMode 多手势的执行方式（[multiGesture] 打开后生效）。
  */
 @Immutable
 data class SensorSettings(
@@ -77,6 +104,8 @@ data class SensorSettings(
     val intervalMs: Int = DEFAULT_INTERVAL_MS,
     val pages: Set<GesturePage> = GesturePage.entries.toSet(),
     val gestures: List<SensorGesture> = emptyList(),
+    val multiGesture: Boolean = false,
+    val multiMode: MultiGestureMode = MultiGestureMode.Simultaneous,
 ) {
     /**
      * 某个页面此刻真正要检测的手势。
@@ -86,6 +115,9 @@ data class SensorSettings(
      */
     fun activeOn(page: GesturePage): List<SensorGesture> =
         if (!enabled || page !in pages) emptyList() else gestures.filter { it.enabled }
+
+    /** 这一拍用哪种多手势方式；关掉时返回 null，表示「只跑第一个命中的」。 */
+    val gestureMode: MultiGestureMode? get() = if (multiGesture) multiMode else null
 
     companion object {
         const val MIN_INTERVAL_MS = 50
@@ -104,6 +136,14 @@ data class SensorSettings(
 
         /** 判定容差的上限（度）：录到一大片动作时不至于把整个半球都算进来。 */
         const val MAX_TOLERANCE_DEG = 25f
+
+        /**
+         * 「按顺序执行」时相邻两条手势的微间隔（毫秒）。
+         *
+         * 动作本身都是瞬时的，真同时发出去就分不出先后了；留 20ms 让它们依次落地，
+         * 人几乎感觉不出延迟，也不会把一拍的几条挤成一团。
+         */
+        const val MULTI_SEQUENCE_GAP_MS = 20L
     }
 }
 
@@ -184,13 +224,52 @@ fun stepIntervalMs(ms: Int, delta: Int): Int =
 fun stepSpeed(speed: Int, delta: Int): Int =
     (speed + delta).coerceIn(SensorGesture.MIN_SPEED, SensorGesture.MAX_SPEED)
 
-/** 把手势的角度范围写成一行给人看的文本。 */
-fun formatTiltRange(gesture: SensorGesture): String =
-    "横滚 ${gesture.minRoll.round1()}° ~ ${gesture.maxRoll.round1()}°\n" +
-        "俯仰 ${gesture.minPitch.round1()}° ~ ${gesture.maxPitch.round1()}°"
+/**
+ * 手改角度**下限**：一次走 [SensorGesture.ANGLE_STEP_DEG]，夹在「最小角度」与当前上限之间。
+ *
+ * 上限那侧也要夹一下，是为了维持 `min ≤ max` —— 区间反过来等于这个手势永远不会命中，
+ * 手改时不该允许用户把区间调反。
+ */
+fun stepAngleMin(
+    value: Float,
+    max: Float,
+    delta: Float = SensorGesture.ANGLE_STEP_DEG,
+): Float {
+    val upper = max.coerceIn(SensorGesture.MIN_ANGLE_DEG, SensorGesture.MAX_ANGLE_DEG)
+    return (value + delta).coerceIn(SensorGesture.MIN_ANGLE_DEG, upper)
+}
+
+/** 手改角度**上限**：一次走 [SensorGesture.ANGLE_STEP_DEG]，夹在当前下限与「最大角度」之间。 */
+fun stepAngleMax(
+    value: Float,
+    min: Float,
+    delta: Float = SensorGesture.ANGLE_STEP_DEG,
+): Float {
+    val lower = min.coerceIn(SensorGesture.MIN_ANGLE_DEG, SensorGesture.MAX_ANGLE_DEG)
+    return (value + delta).coerceIn(lower, SensorGesture.MAX_ANGLE_DEG)
+}
+
+/** 单个角度写成给人看的文本，例如 `32.4°`。 */
+fun formatAngle(degrees: Float): String = "${degrees.round1()}°"
+
+/**
+ * 采样节流：到点了返回新的「上次采样时刻」，没到点返回 null。
+ *
+ * 为什么必须由应用自己做：`registerListener` 的采样周期只是一个**建议**，不少设备
+ * （尤其手表）按固定的 ODR 汇报，设置里的检测间隔根本传不下去 —— 不节流的话，
+ * 「每个检测间隔触发一次」实际就是「每个传感器回调触发一次」，间隔设置形同虚设。
+ *
+ * 处理完一拍后把时刻**对齐到间隔网格**（而不是直接取 `now`）：事件偶尔比间隔早几毫秒时
+ * 只是这一拍不采，下一拍照样落在网格上，不会因为抖动跳掉一整拍、把实际间隔翻倍；
+ * 落后超过两拍（比如刚从后台回来）则重新对齐到 `now`，不追旧账。
+ */
+fun dueSampleTimeMs(nowMs: Long, lastMs: Long, intervalMs: Int): Long? {
+    if (lastMs >= 0L && nowMs - lastMs < intervalMs) return null
+    return if (lastMs < 0L || nowMs - lastMs >= intervalMs * 2L) nowMs else lastMs + intervalMs
+}
 
 /** 保留一位小数，去掉「30.0」后面那个多余的 0。 */
 private fun Float.round1(): String {
-    val rounded = Math.round(this * 10f) / 10f
+    val rounded = (this * 10f).roundToInt() / 10f
     return if (rounded == rounded.toInt().toFloat()) rounded.toInt().toString() else rounded.toString()
 }

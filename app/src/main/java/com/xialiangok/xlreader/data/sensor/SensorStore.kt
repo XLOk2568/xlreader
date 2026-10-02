@@ -55,6 +55,8 @@ class SensorStore(context: Context) {
             put("intervalMs", value.intervalMs)
             put("pages", pages)
             put("gestures", gestures)
+            put("multiGesture", value.multiGesture)
+            put("multiMode", value.multiMode.name)
         }.toString()
     }
 
@@ -99,6 +101,10 @@ class SensorStore(context: Context) {
             // 老设置里没有 pages 这个键时，给「全部页面」这份默认值，而不是空集（空集等于手势全废）。
             pages = if (json.has("pages")) pages else GesturePage.entries.toSet(),
             gestures = gestures,
+            // 老设置里没有这两个键：默认「只跑第一个命中的」，即一直以来的行为。
+            multiGesture = json.optBoolean("multiGesture", false),
+            multiMode = runCatching { MultiGestureMode.valueOf(json.optString("multiMode")) }
+                .getOrDefault(MultiGestureMode.Simultaneous),
         )
     }
 

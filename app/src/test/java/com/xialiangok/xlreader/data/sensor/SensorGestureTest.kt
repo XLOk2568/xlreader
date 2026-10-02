@@ -171,6 +171,74 @@ class SensorGestureTest {
         assertFalse(GestureAction.Tap.hasSpeed)
     }
 
+    /** 手改角度下限：一次 1°，且不会越过上限（区间反过来这个手势就永远不会命中）。 */
+    @Test
+    fun `angle min steps clamp to the upper bound`() {
+        assertEquals(31f, stepAngleMin(30f, 60f, +1f), 0.001f)
+        assertEquals(60f, stepAngleMin(60f, 60f, +1f), 0.001f)
+        assertEquals(
+            SensorGesture.MIN_ANGLE_DEG,
+            stepAngleMin(SensorGesture.MIN_ANGLE_DEG, 60f, -1f),
+            0.001f,
+        )
+    }
+
+    /** 手改角度上限：一次 1°，且不会越过下限。 */
+    @Test
+    fun `angle max steps clamp to the lower bound`() {
+        assertEquals(29f, stepAngleMax(30f, 10f, -1f), 0.001f)
+        assertEquals(10f, stepAngleMax(10f, 10f, -1f), 0.001f)
+        assertEquals(
+            SensorGesture.MAX_ANGLE_DEG,
+            stepAngleMax(SensorGesture.MAX_ANGLE_DEG, 10f, +1f),
+            0.001f,
+        )
+    }
+
+    /** 手改出来的范围照样参与判定：把范围填宽，命中就宽松得多 —— 这正是手改的用处。 */
+    @Test
+    fun `hand edited range still drives matching`() {
+        val wide = gesture(-20f, 20f, -20f, 20f)
+
+        assertTrue(wide.matches(15f, -15f))
+        assertFalse(wide.matches(80f, 0f))
+    }
+
+    /** 单个角度按一位小数显示，整数不带多余的小数点。 */
+    @Test
+    fun `angle label keeps one decimal`() {
+        assertEquals("30°", formatAngle(30f))
+        assertEquals("30.4°", formatAngle(30.44f))
+    }
+
+    /** 采样节流：第一拍一定采，之后不到一个间隔就不采；处理完对齐到网格、落后太多才重新对齐。 */
+    @Test
+    fun `sample gate waits for the interval`() {
+        assertEquals(100L, dueSampleTimeMs(100L, -1L, 200))
+        assertNull(dueSampleTimeMs(150L, 100L, 200))
+        assertNull(dueSampleTimeMs(299L, 100L, 200))
+        assertEquals(300L, dueSampleTimeMs(300L, 100L, 200))
+        // 对齐到间隔网格，而不是直接取 now
+        assertEquals(200L, dueSampleTimeMs(300L, 0L, 200))
+        // 落后超过两拍（例如刚从后台回来）：重新对齐到当前时刻，不追旧账
+        assertEquals(1000L, dueSampleTimeMs(1000L, 100L, 200))
+    }
+
+    /** 网格对齐的实际意义：事件比间隔早几毫秒时只会少采第一拍，稳态下不会两拍才采一次。 */
+    @Test
+    fun `sample gate aligns to the interval grid`() {
+        var last = 0L
+        val taken = mutableListOf<Long>()
+        // 事件每 198ms 来一次，比 200ms 的间隔早 2ms
+        for (t in 198L..990L step 198L) {
+            val due = dueSampleTimeMs(t, last, 200) ?: continue
+            last = due
+            taken.add(t)
+        }
+
+        assertEquals(listOf(396L, 594L, 792L, 990L), taken)
+    }
+
     private fun gesture(minRoll: Float, maxRoll: Float, minPitch: Float, maxPitch: Float) =
         SensorGesture(
             id = "a",

@@ -39,11 +39,14 @@ import androidx.wear.compose.material3.SwitchButton
 import androidx.wear.compose.material3.Text
 import com.xialiangok.xlreader.data.sensor.GestureAction
 import com.xialiangok.xlreader.data.sensor.GesturePage
+import com.xialiangok.xlreader.data.sensor.MultiGestureMode
 import com.xialiangok.xlreader.data.sensor.SensorGesture
 import com.xialiangok.xlreader.data.sensor.SensorSettings
 import com.xialiangok.xlreader.data.sensor.TiltRange
 import com.xialiangok.xlreader.data.sensor.TiltRecorder
-import com.xialiangok.xlreader.data.sensor.formatTiltRange
+import com.xialiangok.xlreader.data.sensor.formatAngle
+import com.xialiangok.xlreader.data.sensor.stepAngleMax
+import com.xialiangok.xlreader.data.sensor.stepAngleMin
 import com.xialiangok.xlreader.data.sensor.stepIntervalMs
 import com.xialiangok.xlreader.data.sensor.stepSpeed
 import com.xialiangok.xlreader.presentation.theme.ReaderSurface
@@ -88,7 +91,42 @@ fun SensorSettingsScreen(
         }
 
         item {
-            // 检测间隔对所有手势通用：就是加速度计的回调周期。
+            // 关掉（默认）时，一次采样里同时命中多条只跑列表里最靠前的那条；
+            // 打开后由下面两个选项决定怎么跑。
+            SwitchButton(
+                checked = settings.multiGesture,
+                onCheckedChange = { onChange(settings.copy(multiGesture = it)) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("允许多个手势一起执行")
+            }
+        }
+
+        if (settings.multiGesture) {
+            MultiGestureMode.entries.forEach { mode ->
+                item {
+                    val selected = settings.multiMode == mode
+                    Card(
+                        onClick = {
+                            if (!selected) onChange(settings.copy(multiMode = mode))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = if (selected) "✓ ${mode.label}" else mode.label,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
             StepRow(
                 label = "检测间隔",
                 value = "${settings.intervalMs} ms",
@@ -351,13 +389,72 @@ fun SensorGestureDetailScreen(
             }
         }
 
-        item { ListSubHeader { Text("录制的角度") } }
+        item { ListSubHeader { Text("角度范围（一次 1°）") } }
         item {
             Text(
-                text = formatTiltRange(gesture),
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center,
+                // 判定口径讲清楚：当前角度落进这组数字就执行，判定时两侧还会再放宽一点容差，
+                // 所以「填 ±5°」并不等于「必须停在 5° 以内」。
+                text = "当前角度落进这个范围就执行动作（判定时两侧还会各放宽一点容差）。" +
+                    "录制只是给一组初值，这里可以自己调。",
+                style = MaterialTheme.typography.bodyExtraSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        item {
+            StepRow(
+                label = "横滚最小",
+                value = formatAngle(gesture.minRoll),
+                onMinus = {
+                    onChange(
+                        gesture.copy(
+                            minRoll = stepAngleMin(gesture.minRoll, gesture.maxRoll, -ANGLE_STEP),
+                        ),
+                    )
+                },
+                onPlus = { onChange(gesture.copy(minRoll = stepAngleMin(gesture.minRoll, gesture.maxRoll))) },
+            )
+        }
+        item {
+            StepRow(
+                label = "横滚最大",
+                value = formatAngle(gesture.maxRoll),
+                onMinus = {
+                    onChange(
+                        gesture.copy(
+                            maxRoll = stepAngleMax(gesture.maxRoll, gesture.minRoll, -ANGLE_STEP),
+                        ),
+                    )
+                },
+                onPlus = { onChange(gesture.copy(maxRoll = stepAngleMax(gesture.maxRoll, gesture.minRoll))) },
+            )
+        }
+        item {
+            StepRow(
+                label = "俯仰最小",
+                value = formatAngle(gesture.minPitch),
+                onMinus = {
+                    onChange(
+                        gesture.copy(
+                            minPitch = stepAngleMin(gesture.minPitch, gesture.maxPitch, -ANGLE_STEP),
+                        ),
+                    )
+                },
+                onPlus = { onChange(gesture.copy(minPitch = stepAngleMin(gesture.minPitch, gesture.maxPitch))) },
+            )
+        }
+        item {
+            StepRow(
+                label = "俯仰最大",
+                value = formatAngle(gesture.maxPitch),
+                onMinus = {
+                    onChange(
+                        gesture.copy(
+                            maxPitch = stepAngleMax(gesture.maxPitch, gesture.minPitch, -ANGLE_STEP),
+                        ),
+                    )
+                },
+                onPlus = { onChange(gesture.copy(maxPitch = stepAngleMax(gesture.maxPitch, gesture.minPitch))) },
             )
         }
         item {
@@ -640,6 +737,9 @@ fun SensorPermissionScreen(
         item { Spacer(Modifier.height(28.dp)) }
     }
 }
+
+/** 手改角度一次走 1°；往下走的那一侧用它的相反数。 */
+private const val ANGLE_STEP = SensorGesture.ANGLE_STEP_DEG
 
 private const val RECORD_HINT =
     "提示：新增手势时先倒计时 3 秒，再在 10 秒内把表摆成要用的姿势；" +

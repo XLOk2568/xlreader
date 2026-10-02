@@ -122,6 +122,7 @@ fun SettingsScreenPreview() {
             preferences = ReaderPreferences(),
             onPreferencesChange = {},
             onOpenSensorSettings = {},
+            onOpenDataAdmin = {},
             onBack = {},
         )
     }

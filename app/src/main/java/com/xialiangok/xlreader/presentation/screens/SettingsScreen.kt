@@ -35,6 +35,7 @@ fun SettingsScreen(
     preferences: ReaderPreferences,
     onPreferencesChange: (ReaderPreferences) -> Unit,
     onOpenSensorSettings: () -> Unit,
+    onOpenDataAdmin: () -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -142,7 +143,19 @@ fun SettingsScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("传感器设置")
+                Text(text = "传感器设置", textAlign = TextAlign.Center)
+            }
+        }
+
+        item {
+            // 备份与还原：进自己的 data 目录做文件操作，以及导出/导入设置 zip。
+            Button(
+                onClick = onOpenDataAdmin,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,
+                colors = readerButtonColors(),
+            ) {
+                Text(text = "数据目录与备份", textAlign = TextAlign.Center)
             }
         }
 
@@ -162,7 +175,7 @@ fun SettingsScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("完成")
+                Text(text = "完成", textAlign = TextAlign.Center)
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
