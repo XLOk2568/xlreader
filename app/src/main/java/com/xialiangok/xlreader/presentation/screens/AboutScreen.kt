@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
@@ -28,21 +30,29 @@ fun AboutScreen(
 
     WearListScreen {
         item {
-            ListHeader { Text("关于") }
+            ListHeader {
+                Text(
+                    text = "关于",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
         item {
             Text(
                 text = "XLreader",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
             )
         }
         item {
             Text(
-                text = "版本 1.0.2610.12 · Wear OS\n最低支持 Android 11（API 30）\n以下为GPT5.6L生成",
+                text = "版本 1.0.2610.28 · Wear OS\n最低支持 Android 11（API 30）\n以下为GPT5.6L生成",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
             )
         }
         item {
@@ -51,6 +61,7 @@ fun AboutScreen(
                     "只保留必要的过渡。",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
             )
         }
         item {
@@ -60,12 +71,15 @@ fun AboutScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
             )
         }
         item {
             Text(
-                text = "1性能优化\n" +
-                        "2菜单功能增加\n"+"3ui优化"+"\n4引用更好的",
+                text = "1.增加保持上次打开Path功能\n"+
+                        "2.修改目录逻辑\n"+
+                        "3.修改部分ui\n"+
+                        "4.修复手势和优化手势体感",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -73,14 +87,14 @@ fun AboutScreen(
         }
 
         item {
-            Button(onClick = onOpenLicenses, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
+            Button(onClick = onOpenLicenses, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors()) {
                 Text("开源许可（${bundledOpenSourceProjects.size} 项）")
             }
         }
 
         item { Spacer(Modifier.height(10.dp)) }
         item {
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
+            Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape =RectangleShape, colors = readerButtonColors()) {
                 Text("返回")
             }
         }

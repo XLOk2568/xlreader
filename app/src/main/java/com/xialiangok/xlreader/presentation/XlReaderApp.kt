@@ -30,6 +30,7 @@ import com.xialiangok.xlreader.data.epub.ExtractStatus
 import com.xialiangok.xlreader.data.epub.ReadHistory
 import com.xialiangok.xlreader.data.epub.ReadingPosition
 import com.xialiangok.xlreader.data.file.defaultRootPath
+import com.xialiangok.xlreader.data.file.appDataDir
 import com.xialiangok.xlreader.data.file.hasAllFilesAccess
 import com.xialiangok.xlreader.data.file.parentWithinRoot
 import com.xialiangok.xlreader.data.sensor.GestureAction
@@ -53,6 +54,8 @@ import com.xialiangok.xlreader.presentation.screens.SensorGestureRecordScreen
 import com.xialiangok.xlreader.presentation.screens.SensorPagesScreen
 import com.xialiangok.xlreader.presentation.screens.SensorPermissionScreen
 import com.xialiangok.xlreader.presentation.screens.SensorSettingsScreen
+import com.xialiangok.xlreader.presentation.screens.SettingsDataAdminScreen
+import com.xialiangok.xlreader.presentation.screens.SettingsImportScreen
 import com.xialiangok.xlreader.presentation.screens.SettingsScreen
 import com.xialiangok.xlreader.presentation.theme.XlReaderTheme
 import kotlinx.coroutines.Dispatchers
@@ -88,6 +91,12 @@ sealed interface Route {
 
     /** 录制一条手势；[id] 为空表示新增，否则是重录已有的那一条。 */
     data class SensorRecord(val id: String?) : Route
+
+    /** data 目录管理（浏览 / 删除 / 复制 / 粘贴 / 导入导出设置）。 */
+    data object DataAdmin : Route
+
+    /** 从用户主文件目录里挑一个 zip 导入设置。 */
+    data object SettingsImport : Route
 }
 
 /** 一本书的打开状态。 */
@@ -289,7 +298,8 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
     // 间隔一变也要重新注册（采样率是注册时定下的）。
     DisposableEffect(activeGestures, sensorSettings.intervalMs, resumed) {
         if (resumed && activeGestures.isNotEmpty()) {
-            detector.start(activeGestures, sensorSettings.intervalMs)
+            // gestureMode 为 null 表示「只跑第一个命中的」；多手势那两种方式由设置页决定。
+            detector.start(activeGestures, sensorSettings.intervalMs, sensorSettings.gestureMode)
         } else {
             detector.stop()
         }
@@ -549,7 +559,26 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                     preferences = preferences,
                     onPreferencesChange = updatePreferences,
                     onOpenSensorSettings = { route = Route.SensorSettings },
+                    onOpenDataAdmin = { route = Route.DataAdmin },
                     onBack = { route = Route.Browser },
+                )
+
+                Route.DataAdmin -> SettingsDataAdminScreen(
+                    dataDirPath = remember { appDataDir(context).absolutePath },
+                    onOpenImport = { route = Route.SettingsImport },
+                    onBack = { route = Route.Settings },
+                )
+
+                Route.SettingsImport -> SettingsImportScreen(
+                    sourceDirPath = rootPath,
+                    // 导入是覆盖：内存里那份 SharedPreferences 已经由导入逻辑写回新值，
+                    // 这里重新读一次，界面立刻换成导入后的设置。
+                    onImported = {
+                        preferences = store.read()
+                        sensorSettings = sensorStore.read()
+                        route = Route.DataAdmin
+                    },
+                    onBack = { route = Route.DataAdmin },
                 )
 
                 Route.SensorSettings -> if (sensorReady) {

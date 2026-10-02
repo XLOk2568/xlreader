@@ -4,7 +4,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,11 +21,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -40,11 +44,14 @@ import com.xialiangok.xlreader.data.epub.EpubBlock
 import com.xialiangok.xlreader.data.epub.EpubBook
 import com.xialiangok.xlreader.data.epub.ReadHistory
 import com.xialiangok.xlreader.data.epub.ReadingPosition
+import com.xialiangok.xlreader.presentation.BindGestureActions
 import com.xialiangok.xlreader.presentation.findActivity
+import com.xialiangok.xlreader.presentation.scrollByItems
 import com.xialiangok.xlreader.presentation.theme.ReadingMetrics
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
@@ -87,10 +94,17 @@ private sealed interface ImageState {
  *   真正的写盘由 [onSaveProgress] 或上层离开正文页时做。
  * @param onSaveProgress 把「现在读到哪一条」立刻落盘一次。落盘交给上层（根组件作用域），
  *   所以切章/离开那一瞬间发起的写入不会被取消，理由见 [ChapterBody]。
- * @param onBackToList  返回章节目录。
+ * @param onOpenCatalog  打开章节目录。**这是「打开」不是「返回」**：目录里再退一步只是关掉目录、
+ *   回到这一章，不会一路退出这本书；要离开这本书请用「返回文件列表」。
+ *   从阅读菜单里打开时还会带着那个菜单回来，见 [menuVisible]。
  * @param onBackToFileList 返回文件列表。**系统返回手势走的是这条**：
  *   从正文页往回退，用户的意图多半是「退出这本书」，而不是先退到目录再退一次。
  *   正文底部与阅读菜单里各有一个同名按钮，也都走这里。
+ * @param menuVisible 阅读菜单是否开着。这个状态**记在根组件上、正文页不自持**：
+ *   从菜单里「打开目录」时不会把它清掉，所以在目录里返回时还是回到那个菜单
+ *   （而不是直接落回正文）；从正文底部的「打开目录」进去时它本来就是关着的，
+ *   返回还是直接回正文。
+ * @param onMenuVisibleChange 菜单开关状态变了（单击正文、点「关闭菜单」、点菜单空白处）。
  */
 @Composable
 fun ChapterScreen(
@@ -101,8 +115,10 @@ fun ChapterScreen(
     onOpenChapter: (Int) -> Unit,
     onPositionChange: (ReadingPosition) -> Unit,
     onSaveProgress: () -> Unit,
-    onBackToList: () -> Unit,
+    onOpenCatalog: () -> Unit,
     onBackToFileList: () -> Unit,
+    menuVisible: Boolean,
+    onMenuVisibleChange: (Boolean) -> Unit,
 ) {
     val view = LocalView.current
     DisposableEffect(preferences.keepScreenOn) {
@@ -110,7 +126,8 @@ fun ChapterScreen(
         onDispose { view.keepScreenOn = false }
     }
     // 系统返回手势 = 退回文件列表（和正文底部的「返回文件列表」一致）；
-    // 想回目录请用正文底部或阅读菜单里的「返回目录」。
+    // 想看目录请用正文底部或阅读菜单里的「打开目录」——它只是打开目录，
+    // 在目录里再返回一次是回到这一章，不会一路退出这本书。
     BackHandler(onBack = onBackToFileList)
 
     ApplyScreenBrightness(preferences.screenBrightness)
@@ -145,8 +162,8 @@ fun ChapterScreen(
         is ChapterState.Failed -> NoticeScreen(
             title = "这一章打不开",
             message = current.message,
-            actionLabel = "返回目录",
-            onAction = onBackToList,
+            actionLabel = "打开目录",
+            onAction = onOpenCatalog,
         )
 
         is ChapterState.Ready -> ChapterBody(
@@ -160,8 +177,10 @@ fun ChapterScreen(
             onOpenChapter = onOpenChapter,
             onPositionChange = onPositionChange,
             onSaveProgress = onSaveProgress,
-            onBackToList = onBackToList,
+            onOpenCatalog = onOpenCatalog,
             onBackToFileList = onBackToFileList,
+            menuVisible = menuVisible,
+            onMenuVisibleChange = onMenuVisibleChange,
         )
     }
 }
@@ -205,15 +224,28 @@ private fun ChapterBody(
     onOpenChapter: (Int) -> Unit,
     onPositionChange: (ReadingPosition) -> Unit,
     onSaveProgress: () -> Unit,
-    onBackToList: () -> Unit,
+    onOpenCatalog: () -> Unit,
     onBackToFileList: () -> Unit,
+    menuVisible: Boolean,
+    onMenuVisibleChange: (Boolean) -> Unit,
 ) {
     val listState = rememberLazyListState()
-    var menuVisible by remember(chapterIndex) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // 体感手势：单击 = 弹出/收起快捷菜单（与手指单击正文完全一样），
+    // 返回 = 走系统返回手势那条出口（回文件列表），翻页 = 按条目滚动。
+    BindGestureActions(
+        onTap = {
+            onMenuVisibleChange(!menuVisible)
+            onSaveProgress()
+        },
+        onBack = onBackToFileList,
+        onScrollBy = { delta -> scope.launch { scrollByItems(listState, delta) } },
+    )
 
     // 阅读位置只上报给上层，**不在这里写盘**：滚动本身不产生任何文件写入。
     // 真正写 history.txt 只有四个时机——加载完这一章 500ms（见下面那个 effect）、
-    // 单击正文弹出菜单、切换章节、离开正文页（返回目录 / 返回文件列表 / 返回手势）。
+    // 单击正文弹出菜单、切换章节、离开正文页（打开目录 / 返回文件列表 / 返回手势）。
     // 后三个都走 [onSaveProgress] / 上层那条路，用根组件的作用域落盘：
     // 一旦离开正文页（或切章），本页的协程会被取消，最后那一刻的位置就写不进去了。
     //
@@ -261,7 +293,7 @@ private fun ChapterBody(
             // 单击正文：弹出菜单，顺手记一次进度（滚动不写盘，所以这里是个便宜的记录点）。
             // 菜单打开后铺满整屏、单击由菜单自己消费，走不到这里，所以「打开」只会记一次。
             onTap = {
-                menuVisible = !menuVisible
+                onMenuVisibleChange(!menuVisible)
                 onSaveProgress()
             },
         ) {
@@ -337,51 +369,57 @@ private fun ChapterBody(
             }
 
             item { Spacer(Modifier.height(10.dp)) }
-            if (hasPrevious) {
-                item {
-                    Button(
-                        onClick = {
-                            // 切章前先把当前这一章读到的位置记下来（本页马上要重组/换章）。
-                            onSaveProgress()
-                            onOpenChapter(chapterIndex - 1)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = readerButtonColors(),
-                    ) {
-                        Text("← 上一章")
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (hasPrevious) {
+                        Button(
+                            onClick = {
+                                onSaveProgress()
+                                onOpenChapter(chapterIndex - 1)
+                            },
+                            modifier = if (hasNext) Modifier.weight(1f) else Modifier.fillMaxWidth(),
+                            shape = RectangleShape,          // 直角
+                            colors = readerButtonColors(),
+                        ) {
+                            Text(text="上一章", textAlign =TextAlign.Center)
+                        }
+                    }
+                    if (hasNext) {
+                        Button(
+                            onClick = {
+                                onSaveProgress()
+                                onOpenChapter(chapterIndex + 1)
+                            },
+                            modifier = if (hasPrevious) Modifier.weight(1f) else Modifier.fillMaxWidth(),
+                            shape = RectangleShape,          // 直角
+                            colors = readerButtonColors(),
+                        ) {
+                            Text(text="下一章", textAlign =TextAlign.Center)
+                        }
                     }
                 }
             }
             item {
                 Button(
-                    onClick = onBackToList,
+                    onClick = onOpenCatalog,
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RectangleShape,          // 直角
                     colors = readerButtonColors(),
                 ) {
-                    Text("返回目录")
+                    Text(text = "打开目录", textAlign =TextAlign.Center)
                 }
             }
             item {
                 Button(
                     onClick = onBackToFileList,
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RectangleShape,          // 直角
                     colors = readerButtonColors(),
                 ) {
-                    Text("返回文件列表")
-                }
-            }
-            if (hasNext) {
-                item {
-                    Button(
-                        onClick = {
-                            onSaveProgress()
-                            onOpenChapter(chapterIndex + 1)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = readerButtonColors(),
-                    ) {
-                        Text("下一章 →")
-                    }
+                    Text(text = "返回文件列表", textAlign =TextAlign.Center)
                 }
             }
             item { Spacer(Modifier.height(28.dp)) }
@@ -391,19 +429,19 @@ private fun ChapterBody(
             ReaderMenuOverlay(
                 preferences = preferences,
                 onPreferencesChange = onPreferencesChange,
-                onBackToCatalog = {
-                    // 和正文底部那个「返回目录」按钮完全等价：先收起菜单，再交给上层切回目录。
-                    // 进度落盘、常亮、屏幕亮度这些都不在这里收拾——它们跟着正文页一起
+                onOpenCatalog = {
+                    // 不在这里把菜单关掉：菜单开着这件事现在记在根组件上，
+                    // 「打开目录 → 在目录里返回」要回到的还是这个菜单。
+                    // 进度落盘、常亮、屏幕亮度这些都不用在这里收拾——它们跟着正文页一起
                     // 离开组合时由各自的 DisposableEffect 还原，落盘则由上层在切页前补一次。
-                    menuVisible = false
-                    onBackToList()
+                    onOpenCatalog()
                 },
                 onBackToFileList = {
-                    // 同上，只是出口换成文件列表。
-                    menuVisible = false
+                    // 离开这本书了，菜单状态要跟着清掉，免得下一本书进来又弹出来。
+                    onMenuVisibleChange(false)
                     onBackToFileList()
                 },
-                onDismiss = { menuVisible = false },
+                onDismiss = { onMenuVisibleChange(false) },
             )
         }
     }

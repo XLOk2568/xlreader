@@ -5,11 +5,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -24,9 +26,17 @@ import androidx.wear.compose.material3.Text
 import com.xialiangok.xlreader.data.epub.EpubBook
 import com.xialiangok.xlreader.data.epub.ReadHistory
 import com.xialiangok.xlreader.data.epub.ReadingPosition
+import com.xialiangok.xlreader.presentation.BindGestureActions
+import com.xialiangok.xlreader.presentation.centeredItemKey
+import com.xialiangok.xlreader.presentation.scrollByItems
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
+
+/** 列表项的 key：靠它把「屏幕上正中央的那一项」反查回具体章节。 */
+private const val CHAPTER_KEY_PREFIX = "chapter:"
+private const val RESUME_KEY = "resume"
 
 /**
  * 章节目录页。
@@ -36,13 +46,19 @@ import com.xialiangok.xlreader.presentation.theme.readerButtonColors
  *
  * 如果 `history.txt` 里有上次读到的位置，顶部会出现「继续阅读」。
  *
+ * 这一页是正文页「打开目录」打开的：所以**返回 = 关掉目录、回到进来时那一章**，
+ * 不会一路退出这本书、落到文件列表上；要回文件列表用页面底部的「返回文件列表」。
+ *
  * @param onOpenChapter 打开第 N 章。
+ * @param onBack 关掉目录，回到进来时那一章。
+ * @param onBackToFileList 返回文件列表（明确要离开这本书时才走这里）。
  */
 @Composable
 fun ChapterListScreen(
     book: EpubBook,
     onOpenChapter: (Int) -> Unit,
     onBack: () -> Unit,
+    onBackToFileList: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
 
@@ -62,10 +78,32 @@ fun ChapterListScreen(
     val headerItems = 2 + (if (resume != null) 1 else 0)
     val scrollTarget = currentChapter?.let { headerItems + it } ?: 0
 
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    // 体感手势：单击 = 打开屏幕上正中央的那一项（含「继续阅读」卡片），
+    // 返回 = 关掉目录、回到进来时那一章（和系统返回手势同一条路），翻页 = 按条目滚动。
+    BindGestureActions(
+        onTap = {
+            val key = centeredItemKey(listState) as? String ?: return@BindGestureActions
+            val index = when {
+                key == RESUME_KEY -> resume?.chapter
+                key.startsWith(CHAPTER_KEY_PREFIX) ->
+                    key.removePrefix(CHAPTER_KEY_PREFIX).toIntOrNull()
+
+                else -> null
+            }
+            index?.let(onOpenChapter)
+        },
+        onBack = onBack,
+        onScrollBy = { delta -> scope.launch { scrollByItems(listState, delta) } },
+    )
+
     WearListScreen(
         // saved 从 null 变成有值时重算一次滚动位置，保证偏移量是对的。
         resetKey = saved,
         startIndex = scrollTarget,
+        listState = listState,
     ) {
         item {
             ListHeader {
@@ -88,7 +126,7 @@ fun ChapterListScreen(
         }
 
         if (resume != null) {
-            item {
+            item(key = RESUME_KEY) {
                 Card(
                     onClick = { onOpenChapter(resume.chapter) },
                     modifier = Modifier.fillMaxWidth(),
@@ -113,7 +151,11 @@ fun ChapterListScreen(
             }
         }
 
-        itemsIndexed(titles, contentType = { _, _ -> "chapter" }) { index, title ->
+        itemsIndexed(
+            titles,
+            key = { index, _ -> "$CHAPTER_KEY_PREFIX$index" },
+            contentType = { _, _ -> "chapter" },
+        ) { index, title ->
             Card(
                 onClick = { onOpenChapter(index) },
                 modifier = Modifier.fillMaxWidth(),
@@ -143,7 +185,7 @@ fun ChapterListScreen(
 
         item { Spacer(Modifier.height(10.dp)) }
         item {
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
+            Button(onClick = onBackToFileList, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
                 Text("返回文件列表")
             }
         }
