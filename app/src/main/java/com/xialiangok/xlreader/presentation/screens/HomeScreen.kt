@@ -62,7 +62,7 @@ fun HomeScreen(
     var entries by remember(dirPath) { mutableStateOf<List<FileEntry>>(emptyList()) }
     var loading by remember(dirPath) { mutableStateOf(true) }
 
-    // 列目录要走 IO 线程，否则大目录会让首帧掉帧。
+    // 列目录要走 IO 线程
     LaunchedEffect(dirPath) {
         loading = true
         entries = withContext(Dispatchers.IO) { listDirectory(File(dirPath)) }
@@ -77,8 +77,8 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    // 体感手势：单击 = 打开屏幕上正中央的那一项（列表项用路径当 key，正好能反查回条目），
-    // 返回 = 上一级（已经在最外层就没有这个动作），翻页 = 按条目滚动。
+    // 体感手势：单击 = 打开屏幕上正中央的那一项（列表项用路径当 key，正好能反查回条目）
+    // 返回 = 上一级（已经在最外层就没有这个动作），翻页 = 按条目滚动
     BindGestureActions(
         onTap = {
             val path = centeredItemKey(listState) as? String ?: return@BindGestureActions
@@ -108,6 +108,8 @@ fun HomeScreen(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyExtraSmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -120,7 +122,8 @@ fun HomeScreen(
                         "$folderCount 个文件夹 · $bookCount 本电子书"
                     },
                     style = MaterialTheme.typography.bodyExtraSmall,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -128,7 +131,7 @@ fun HomeScreen(
         if (parent != null) {
             item {
                 Button(onClick = onNavigateUp, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors()) {
-                    Text(text = "上一级", textAlign = TextAlign.Center)
+                    Text(text = "上一级", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
@@ -155,21 +158,21 @@ fun HomeScreen(
             )
         }
 
-        item { ListSubHeader { Text(text = "其他", textAlign =TextAlign.Center) } }
+        item { ListSubHeader { Text(text = "其他", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth()) } }
         item {
             // 单击这个子按钮就真的退出：结束 Activity + 从最近任务里移除，不是跳去设置页。
             Button(onClick = onExitApp, modifier = Modifier.fillMaxWidth(), shape = RectangleShape,colors = readerButtonColors()) {
-                Text(text ="退出本应用", textAlign =TextAlign.Center)
+                Text(text ="退出本应用", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
             Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors()) {
-                Text(text ="设置", textAlign =TextAlign.Center)
+                Text(text ="设置", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
             Button(onClick = onOpenAbout, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors()) {
-                Text(text ="关于", textAlign =TextAlign.Center)
+                Text(text ="关于", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
@@ -186,10 +189,13 @@ private fun EntryCard(entry: FileEntry, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
         )
         Text(
+            // 目录 / 文件的「名字」保持左对齐（长文件名要靠左才看得清），只把下面这行说明居中。
             text = if (entry.isDirectory) "文件夹" else formatSize(entry.sizeBytes),
             style = MaterialTheme.typography.bodyExtraSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
             maxLines = 1,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }

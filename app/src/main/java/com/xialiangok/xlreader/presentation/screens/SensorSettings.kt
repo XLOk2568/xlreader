@@ -77,7 +77,7 @@ fun SensorSettingsScreen(
     BackHandler(onBack = onBack)
 
     WearListScreen {
-        item { ListHeader { Text("体感手势") } }
+        item { ListHeader { Text("体感手势", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             // 总开关。关掉它不是「手势不生效」那么简单：根组件会直接注销传感器，
             // 一个采样点都不再收。
@@ -86,7 +86,7 @@ fun SensorSettingsScreen(
                 onCheckedChange = { onChange(settings.copy(enabled = it)) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("启用手势")
+                Text("启用手势", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 
@@ -98,7 +98,7 @@ fun SensorSettingsScreen(
                 onCheckedChange = { onChange(settings.copy(multiGesture = it)) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("允许多个手势一起执行")
+                Text("允许多个手势一起执行", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 
@@ -120,6 +120,8 @@ fun SensorSettingsScreen(
                             } else {
                                 MaterialTheme.colorScheme.onSurface
                             },
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
@@ -160,7 +162,7 @@ fun SensorSettingsScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text(text = "启用页面（${settings.pages.size}/${GesturePage.entries.size}）")
+                Text(text = "启用页面（${settings.pages.size}/${GesturePage.entries.size}）", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 
@@ -171,7 +173,7 @@ fun SensorSettingsScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("新增手势")
+                Text("新增手势", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 
@@ -179,12 +181,13 @@ fun SensorSettingsScreen(
             Text(
                 text = RECORD_HINT,
                 style = MaterialTheme.typography.bodyExtraSmall,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
 
         if (settings.gestures.isNotEmpty()) {
-            item { ListSubHeader { Text("已录制的手势") } }
+            item { ListSubHeader { Text("已录制的手势", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         }
 
         settings.gestures.forEach { gesture ->
@@ -194,6 +197,8 @@ fun SensorSettingsScreen(
                     Text(
                         text = gesture.name,
                         style = MaterialTheme.typography.titleSmall,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
                         text = if (gesture.enabled) {
@@ -207,6 +212,8 @@ fun SensorSettingsScreen(
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -226,7 +233,7 @@ fun SensorSettingsScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("启用「${gesture.name}」", style = MaterialTheme.typography.bodySmall)
+                    Text("启用「${gesture.name}」", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
@@ -250,7 +257,7 @@ fun SensorSettingsScreen(
                 shape=RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("完成")
+                Text("完成", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
@@ -267,13 +274,14 @@ fun SensorPagesScreen(
     BackHandler(onBack = onBack)
 
     WearListScreen {
-        item { ListHeader { Text("启用页面") } }
+        item { ListHeader { Text("启用页面", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
 
         item {
             Text(
                 text = "只有勾上的页面才会开启手势检测任务；进别的页面会立刻停掉，" +
                     "一个采样点都不收。",
                 style = MaterialTheme.typography.bodyExtraSmall,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -291,7 +299,7 @@ fun SensorPagesScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(page.label)
+                    Text(page.label, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
@@ -304,7 +312,7 @@ fun SensorPagesScreen(
                 shape=RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("完成")
+                Text("完成", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
@@ -327,9 +335,9 @@ fun SensorGestureDetailScreen(
     BackHandler(onBack = onBack)
 
     WearListScreen {
-        item { ListHeader { Text("手势设置") } }
+        item { ListHeader { Text("手势设置", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
 
-        item { ListSubHeader { Text("名称") } }
+        item { ListSubHeader { Text("名称", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             // Wear M3 的 Card 只有「可点击」那一种重载，而这里只是输入框的外壳，
             // 包成卡片会跟输入框抢点击，所以用一个同色的圆角容器。
@@ -354,7 +362,7 @@ fun SensorGestureDetailScreen(
             }
         }
 
-        item { ListSubHeader { Text("动作") } }
+        item { ListSubHeader { Text("动作", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         GestureAction.entries.forEach { action ->
             item {
                 val selected = gesture.action == action
@@ -372,6 +380,8 @@ fun SensorGestureDetailScreen(
                         } else {
                             MaterialTheme.colorScheme.onSurface
                         },
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -389,7 +399,7 @@ fun SensorGestureDetailScreen(
             }
         }
 
-        item { ListSubHeader { Text("角度范围（一次 1°）") } }
+        item { ListSubHeader { Text("角度范围（一次 1°）", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             Text(
                 // 判定口径讲清楚：当前角度落进这组数字就执行，判定时两侧还会再放宽一点容差，
@@ -398,6 +408,7 @@ fun SensorGestureDetailScreen(
                     "录制只是给一组初值，这里可以自己调。",
                 style = MaterialTheme.typography.bodyExtraSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -464,7 +475,7 @@ fun SensorGestureDetailScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("重新录制")
+                Text("重新录制", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 
@@ -476,7 +487,7 @@ fun SensorGestureDetailScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("删除这个手势")
+                Text("删除这个手势", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
@@ -486,7 +497,7 @@ fun SensorGestureDetailScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("完成")
+                Text("完成", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
@@ -644,7 +655,7 @@ fun SensorGestureRecordScreen(
                     shape = RectangleShape,
                     colors = readerButtonColors(),
                 ) {
-                    Text("重试")
+                    Text("重试", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
             Button(
@@ -656,7 +667,7 @@ fun SensorGestureRecordScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("取消")
+                Text("取消", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -678,11 +689,12 @@ fun SensorPermissionScreen(
     BackHandler(onBack = onBack)
 
     WearListScreen {
-        item { ListHeader { Text("读不到加速度计") } }
+        item { ListHeader { Text("读不到加速度计", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             Text(
                 text = "体感手势要靠加速度计算倾斜角度，现在这台设备上没读到它。",
                 style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -692,6 +704,7 @@ fun SensorPermissionScreen(
                     "应用不联网，传感器数据只在手表本地做判断，不会上传。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -703,7 +716,7 @@ fun SensorPermissionScreen(
                 modifier = Modifier.fillMaxWidth(),
                 colors = readerButtonColors(),
             ) {
-                Text("去系统设置查看")
+                Text("去系统设置查看", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
@@ -712,7 +725,7 @@ fun SensorPermissionScreen(
                 modifier = Modifier.fillMaxWidth(),
                 colors = readerButtonColors(),
             ) {
-                Text("已授权，重新检查")
+                Text("已授权，重新检查", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
@@ -721,7 +734,7 @@ fun SensorPermissionScreen(
                 modifier = Modifier.fillMaxWidth(),
                 colors = readerButtonColors(),
             ) {
-                Text("返回设置")
+                Text("返回设置", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 

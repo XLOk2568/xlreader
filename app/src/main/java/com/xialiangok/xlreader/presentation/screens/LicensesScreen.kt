@@ -65,12 +65,13 @@ fun LicensesScreen(onBack: () -> Unit) {
             LicenseCard(project = project)
         }
 
-        item { ListSubHeader { Text("构建参考") } }
+        item { ListSubHeader { Text("构建参考", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             Text(
                 text = BUILD_REFERENCE_NOTE,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -78,7 +79,7 @@ fun LicensesScreen(onBack: () -> Unit) {
         item { Spacer(Modifier.height(10.dp)) }
         item {
             Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape = RectangleShape,colors = readerButtonColors()) {
-                Text("返回")
+                Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
@@ -105,16 +106,22 @@ private fun LicenseCard(project: OpenSourceProject) {
             style = MaterialTheme.typography.titleSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
         Text(
             text = project.license,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
         Text(
             text = project.note,
             style = MaterialTheme.typography.bodyExtraSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }

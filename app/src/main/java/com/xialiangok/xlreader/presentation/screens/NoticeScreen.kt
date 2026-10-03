@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
@@ -25,12 +26,13 @@ fun NoticeScreen(
     onAction: (() -> Unit)? = null,
 ) {
     WearListScreen {
-        item { ListHeader { Text(title) } }
+        item { ListHeader { Text(title, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -38,7 +40,7 @@ fun NoticeScreen(
             item { Spacer(Modifier.height(10.dp)) }
             item {
                 Button(onClick = onAction, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
-                    Text(actionLabel)
+                    Text(actionLabel, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
         }

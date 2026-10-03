@@ -311,6 +311,9 @@ private fun ChapterBody(
                         lineHeight = titleFontSize * 1.1f,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
+                        // 只把标题居中；下面的正文段落保持左对齐（阅读时不居中）。
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -389,7 +392,7 @@ private fun ChapterBody(
                             shape = RectangleShape,          // 直角
                             colors = readerButtonColors(),
                         ) {
-                            Text(text="上一章", textAlign =TextAlign.Center)
+                            Text(text="上一章", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
                         }
                     }
                     if (hasNext) {
@@ -402,7 +405,7 @@ private fun ChapterBody(
                             shape = RectangleShape,          // 直角
                             colors = readerButtonColors(),
                         ) {
-                            Text(text="下一章", textAlign =TextAlign.Center)
+                            Text(text="下一章", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
                         }
                     }
                 }
@@ -414,7 +417,7 @@ private fun ChapterBody(
                     shape = RectangleShape,          // 直角
                     colors = readerButtonColors(),
                 ) {
-                    Text(text = "打开目录", textAlign =TextAlign.Center)
+                    Text(text = "打开目录", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
             item {
@@ -424,7 +427,7 @@ private fun ChapterBody(
                     shape = RectangleShape,          // 直角
                     colors = readerButtonColors(),
                 ) {
-                    Text(text = "返回文件列表", textAlign =TextAlign.Center)
+                    Text(text = "返回文件列表", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
             item { Spacer(Modifier.height(28.dp)) }

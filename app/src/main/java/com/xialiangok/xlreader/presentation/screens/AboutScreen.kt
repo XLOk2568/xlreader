@@ -48,7 +48,7 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "版本 1.0.2611.1 · Wear OS\n最低支持 Android 11（API 30）\n以下为GPT5.6L生成",
+                text = "版本 1.0.2611.3 · Wear OS\n最低支持 Android 11（API 30）\n以下为GPT5.6L生成",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -82,20 +82,21 @@ fun AboutScreen(
                         "4.修复手势和优化手势体感",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
 
         item {
             Button(onClick = onOpenLicenses, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors()) {
-                Text("开源许可（${bundledOpenSourceProjects.size} 项）")
+                Text("开源许可（${bundledOpenSourceProjects.size} 项）", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 
         item { Spacer(Modifier.height(10.dp)) }
         item {
             Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape =RectangleShape, colors = readerButtonColors()) {
-                Text("返回")
+                Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item { Spacer(Modifier.height(28.dp)) }

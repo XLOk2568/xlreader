@@ -27,12 +27,13 @@ fun PermissionScreen(
 ) {
     WearListScreen {
         item {
-            ListHeader { Text("需要文件访问权限") }
+            ListHeader { Text("需要文件访问权限", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
         }
         item {
             Text(
                 text = "XLreader 要浏览你手表上的电子书，需要「所有文件访问」权限。",
                 style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -41,6 +42,7 @@ fun PermissionScreen(
                 text = "应用本身不联网、不上传任何文件；这个权限只用于读取你指定的目录和 epub。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -48,12 +50,12 @@ fun PermissionScreen(
         item { Spacer(Modifier.height(6.dp)) }
         item {
             Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
-                Text("去系统设置授权")
+                Text("去系统设置授权", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
             Button(onClick = onRecheck, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
-                Text("已授权，重新检查")
+                Text("已授权，重新检查", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 

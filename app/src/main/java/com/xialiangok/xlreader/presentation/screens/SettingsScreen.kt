@@ -114,7 +114,7 @@ fun SettingsScreen(
                 enabled = false,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("减少动效")
+                Text("减少动效", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
@@ -147,7 +147,7 @@ fun SettingsScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text(text = "传感器设置", textAlign = TextAlign.Center)
+                Text(text = "传感器设置", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 
@@ -159,7 +159,7 @@ fun SettingsScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text(text = "数据目录与备份", textAlign = TextAlign.Center)
+                Text(text = "数据目录与备份", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 
@@ -179,7 +179,7 @@ fun SettingsScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text(text = "完成", textAlign = TextAlign.Center)
+                Text(text = "完成", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item { Spacer(Modifier.height(28.dp)) }

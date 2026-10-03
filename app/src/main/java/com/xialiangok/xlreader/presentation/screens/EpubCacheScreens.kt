@@ -35,7 +35,7 @@ fun ExtractingScreen(
     val percent = (safe * 100).toInt()
 
     WearListScreen {
-        item { ListHeader { Text("正在解压") } }
+        item { ListHeader { Text("正在解压", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             Text(
                 text = fileName,
@@ -107,7 +107,7 @@ fun CachePromptScreen(
     onCancel: () -> Unit,
 ) {
     WearListScreen {
-        item { ListHeader { Text("已有解压缓存") } }
+        item { ListHeader { Text("已有解压缓存", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             Text(
                 text = fileName,
@@ -128,23 +128,24 @@ fun CachePromptScreen(
                     "等原文件变了才会再问一次。\n\n" +
                     "不管选哪个，阅读进度都不会丢。",
                 style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
 
         item {
             Button(onClick = onKeep, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
-                Text("直接阅读（不更新）")
+                Text("直接阅读（不更新）", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
             Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
-                Text("重新解压（更新缓存）")
+                Text("重新解压（更新缓存）", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
             Button(onClick = onCancel, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
-                Text("取消")
+                Text("取消", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item { Spacer(Modifier.height(28.dp)) }

@@ -111,6 +111,8 @@ fun ChapterListScreen(
                     text = book.title,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -135,17 +137,23 @@ fun ChapterListScreen(
                         text = "继续阅读",
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
                         text = titles[resume.chapter],
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
                         text = "第 ${resume.chapter + 1} / ${titles.size} 节",
                         style = MaterialTheme.typography.bodyExtraSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -165,6 +173,8 @@ fun ChapterListScreen(
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
                     text = if (index == currentChapter) {
@@ -179,6 +189,8 @@ fun ChapterListScreen(
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -186,7 +198,7 @@ fun ChapterListScreen(
         item { Spacer(Modifier.height(10.dp)) }
         item {
             Button(onClick = onBackToFileList, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
-                Text("返回文件列表")
+                Text("返回文件列表", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item { Spacer(Modifier.height(28.dp)) }

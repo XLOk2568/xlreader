@@ -131,6 +131,8 @@ fun ReaderMenuOverlay(
                 text = "$time2\n阅读设置",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
             )
 
             Button(
@@ -139,7 +141,7 @@ fun ReaderMenuOverlay(
                 shape = RectangleShape,          // 直角
                 colors = readerButtonColors(),
             ) {
-                Text(text = "关闭菜单", textAlign =TextAlign.Center)
+                Text(text = "关闭菜单", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
 
             Button(
@@ -148,7 +150,7 @@ fun ReaderMenuOverlay(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text(text = "打开目录", textAlign =TextAlign.Center)
+                Text(text = "打开目录", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
 
             Button(
@@ -157,7 +159,7 @@ fun ReaderMenuOverlay(
                 shape = RectangleShape,          // 直角
                 colors = readerButtonColors(),
             ) {
-                Text(text = "返回文件列表", textAlign =TextAlign.Center)
+                Text(text = "返回文件列表", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
 
             Button(
@@ -166,7 +168,7 @@ fun ReaderMenuOverlay(
                 shape = RectangleShape,          // 直角
                 colors = readerButtonColors(),
             ) {
-                Text(text = "设置", textAlign =TextAlign.Center)
+                Text(text = "设置", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
             Spacer(Modifier.height(4.dp))
             // ---- 字号：和亮度、RGB 一样用「− / ＋」一次走一磅，直接显示磅值 ----
@@ -190,7 +192,7 @@ fun ReaderMenuOverlay(
                 onCheckedChange = { update.value(preferences.copy(keepScreenOn = it)) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("阅读时常亮", style = MaterialTheme.typography.bodySmall)
+                Text("阅读时常亮", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
 
             SectionLabel("屏幕亮度")
@@ -283,7 +285,7 @@ fun ReaderMenuOverlay(
                 shape = RectangleShape,          // 直角
                 colors = readerButtonColors(),
             ) {
-                Text(text="文字颜色恢复默认", textAlign = TextAlign.Center)
+                Text(text="文字颜色恢复默认", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
 
             Spacer(Modifier.height(20.dp))
@@ -359,6 +361,7 @@ internal fun StepRow(
             text = label,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
             modifier = Modifier.weight(1f),
         )
         StepButton("−", onMinus)

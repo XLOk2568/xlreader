@@ -85,7 +85,7 @@ fun SettingsDataAdminScreen(
     }
 
     WearListScreen(resetKey = dirPath) {
-        item { ListHeader { Text("数据目录") } }
+        item { ListHeader { Text("数据目录", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             ListSubHeader {
                 Text(
@@ -107,6 +107,7 @@ fun SettingsDataAdminScreen(
                     },
                     style = MaterialTheme.typography.bodyExtraSmall,
                     textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -122,7 +123,7 @@ fun SettingsDataAdminScreen(
                     shape = RectangleShape,
                     colors = readerButtonColors(),
                 ) {
-                    Text("上一级")
+                    Text("上一级", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
@@ -163,17 +164,21 @@ fun SettingsDataAdminScreen(
                     } else {
                         MaterialTheme.colorScheme.onSurface
                     },
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
                     text = if (entry.isDirectory) "文件夹" else formatSize(entry.sizeBytes),
                     style = MaterialTheme.typography.bodyExtraSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
 
-        item { ListSubHeader { Text("文件操作", textAlign = TextAlign.Center) } }
+        item { ListSubHeader { Text("文件操作", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) } }
         item {
             Text(
                 text = if (selectedFile != null) {
@@ -199,7 +204,7 @@ fun SettingsDataAdminScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("复制")
+                Text("复制", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
@@ -220,7 +225,7 @@ fun SettingsDataAdminScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text(if (clipboard == null) "粘贴" else "粘贴 ${File(clipboard!!).name}")
+                Text(if (clipboard == null) "粘贴" else "粘贴 ${File(clipboard!!).name}", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
@@ -238,11 +243,11 @@ fun SettingsDataAdminScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("删除")
+                Text("删除", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 
-        item { ListSubHeader { Text("设置备份", textAlign = TextAlign.Center) } }
+        item { ListSubHeader { Text("设置备份", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) } }
         item {
             // 导出到用户主文件目录（内部存储根），导入页在同一层就能看到这个 zip。
             Button(
@@ -261,7 +266,7 @@ fun SettingsDataAdminScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("导出设置")
+                Text("导出设置", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
@@ -271,7 +276,7 @@ fun SettingsDataAdminScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("导入设置")
+                Text("导入设置", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 
@@ -283,7 +288,7 @@ fun SettingsDataAdminScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("返回")
+                Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
@@ -321,7 +326,7 @@ fun SettingsImportScreen(
     }
 
     WearListScreen(resetKey = sourceDirPath) {
-        item { ListHeader { Text("导入设置") } }
+        item { ListHeader { Text("导入设置", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             ListSubHeader {
                 Text(
@@ -339,6 +344,7 @@ fun SettingsImportScreen(
                     "导出设置生成的 zip 就放在这个目录里。",
                 style = MaterialTheme.typography.bodyExtraSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -380,11 +386,15 @@ fun SettingsImportScreen(
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
                     text = formatSize(entry.sizeBytes),
                     style = MaterialTheme.typography.bodyExtraSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -397,7 +407,7 @@ fun SettingsImportScreen(
                 shape = RectangleShape,
                 colors = readerButtonColors(),
             ) {
-                Text("返回")
+                Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
