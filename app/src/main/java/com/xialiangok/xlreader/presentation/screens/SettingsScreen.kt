@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
@@ -122,7 +123,10 @@ fun SettingsScreen(
                 onCheckedChange = { onPreferencesChange(preferences.copy(keepScreenOn = it)) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("阅读时常亮")
+                Text(text="阅读时常亮",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
             }
         }
         item {

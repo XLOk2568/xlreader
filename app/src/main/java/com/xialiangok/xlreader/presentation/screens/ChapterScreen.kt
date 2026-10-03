@@ -100,6 +100,8 @@ private sealed interface ImageState {
  * @param onBackToFileList 返回文件列表。**系统返回手势走的是这条**：
  *   从正文页往回退，用户的意图多半是「退出这本书」，而不是先退到目录再退一次。
  *   正文底部与阅读菜单里各有一个同名按钮，也都走这里。
+ * @param onOpenSettings 打开设置页（阅读菜单里的「设置」）。和打开目录一样是「打开」而不是
+ *   「返回」：在设置页里退一步回到的还是这一章，不会一路退出这本书、落到文件列表上。
  * @param menuVisible 阅读菜单是否开着。这个状态**记在根组件上、正文页不自持**：
  *   从菜单里「打开目录」时不会把它清掉，所以在目录里返回时还是回到那个菜单
  *   （而不是直接落回正文）；从正文底部的「打开目录」进去时它本来就是关着的，
@@ -117,6 +119,7 @@ fun ChapterScreen(
     onSaveProgress: () -> Unit,
     onOpenCatalog: () -> Unit,
     onBackToFileList: () -> Unit,
+    onOpenSettings: () -> Unit,
     menuVisible: Boolean,
     onMenuVisibleChange: (Boolean) -> Unit,
 ) {
@@ -179,6 +182,7 @@ fun ChapterScreen(
             onSaveProgress = onSaveProgress,
             onOpenCatalog = onOpenCatalog,
             onBackToFileList = onBackToFileList,
+            onOpenSettings = onOpenSettings,
             menuVisible = menuVisible,
             onMenuVisibleChange = onMenuVisibleChange,
         )
@@ -226,6 +230,7 @@ private fun ChapterBody(
     onSaveProgress: () -> Unit,
     onOpenCatalog: () -> Unit,
     onBackToFileList: () -> Unit,
+    onOpenSettings: () -> Unit,
     menuVisible: Boolean,
     onMenuVisibleChange: (Boolean) -> Unit,
 ) {
@@ -440,6 +445,11 @@ private fun ChapterBody(
                     // 离开这本书了，菜单状态要跟着清掉，免得下一本书进来又弹出来。
                     onMenuVisibleChange(false)
                     onBackToFileList()
+                },
+                onOpenSettings = {
+                    // 和「打开目录」一样：不清菜单状态，从设置页回来时还是这个菜单。
+                    // 进度落盘由上层在切页前补一次，和打开目录走同一条路。
+                    onOpenSettings()
                 },
                 onDismiss = { onMenuVisibleChange(false) },
             )

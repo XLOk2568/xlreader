@@ -1,5 +1,6 @@
 package com.xialiangok.xlreader.presentation
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -180,6 +181,14 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
     var catalogReturnChapter by remember { mutableStateOf<Int?>(null) }
 
     /**
+     * 从正文页的阅读菜单打开设置页时所在的那一章；设置页里的返回就是回到它。
+     *
+     * 和目录同理：设置是「打开」而不是「返回」，在设置里退一步不该一路退出这本书
+     * （那等于把书关了、落到文件列表上）。从文件列表进的设置页这里为 null，返回就回文件列表。
+     */
+    var settingsReturnChapter by remember { mutableStateOf<Int?>(null) }
+
+    /**
      * 阅读界面的快捷菜单是不是开着。
      *
      * 状态放在根组件而不是正文页里：从菜单「打开目录」时**不清掉它**，
@@ -211,7 +220,7 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
     }
 
     var route by remember {
-        mutableStateOf<Route>(
+        mutableStateOf(
             when {
                 incomingUri != null -> Route.Opening
                 hasAllFilesAccess() -> Route.Browser
@@ -349,6 +358,13 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
         route = catalogReturnChapter?.let { Route.Chapter(it) } ?: Route.Browser
     }
 
+    /** 从正文页的阅读菜单打开设置页：先落盘，返回时回到那一章（不是文件列表）。 */
+    fun openSettingsFromReader(book: EpubBook, chapterIndex: Int) {
+        saveProgressOnLeave(book, chapterIndex)
+        settingsReturnChapter = chapterIndex
+        route = Route.Settings
+    }
+
     /** 从正文页返回文件列表（正文里的按钮与系统返回手势）：同样先落盘。 */
     fun backToFileList(book: EpubBook, chapterIndex: Int) {
         saveProgressOnLeave(book, chapterIndex)
@@ -416,7 +432,7 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                     ExtractStatus.Complete -> if (upToDate) {
                         openForReading(file)
                     } else {
-                        BookState.AskRefresh
+                        // BookState.AskRefresh
                     }
 
                     ExtractStatus.Foreign -> bookState =
@@ -470,7 +486,11 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                     onNavigateUp = {
                         parentWithinRoot(File(browserDir))?.let { setBrowserDir(it.absolutePath) }
                     },
-                    onOpenSettings = { route = Route.Settings },
+                    // 从文件列表进设置：返回就回文件列表（把阅览器那条来路清掉）。
+                    onOpenSettings = {
+                        settingsReturnChapter = null
+                        route = Route.Settings
+                    },
                     onOpenAbout = { route = Route.About },
                     // 退出本应用：finishAndRemoveTask 会把整个任务结束并从最近任务列表里移除，
                     // 比只 finish 当前 Activity 更接近「退出」的字面意思。
@@ -543,6 +563,7 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                             onSaveProgress = { saveProgressOnLeave(state.book, current.index) },
                             onOpenCatalog = { openCatalog(state.book, current.index) },
                             onBackToFileList = { backToFileList(state.book, current.index) },
+                            onOpenSettings = { openSettingsFromReader(state.book, current.index) },
                             menuVisible = readerMenuVisible,
                             onMenuVisibleChange = { readerMenuVisible = it },
                         )
@@ -560,7 +581,12 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                     onPreferencesChange = updatePreferences,
                     onOpenSensorSettings = { route = Route.SensorSettings },
                     onOpenDataAdmin = { route = Route.DataAdmin },
-                    onBack = { route = Route.Browser },
+                    // 从阅读菜单进来的（settingsReturnChapter 有值）回到那一章，
+                    // 从文件列表进来的回文件列表。
+                    onBack = {
+                        route = settingsReturnChapter?.let { Route.Chapter(it) } ?: Route.Browser
+                        settingsReturnChapter = null
+                    },
                 )
 
                 Route.DataAdmin -> SettingsDataAdminScreen(
@@ -744,6 +770,7 @@ private fun materialize(context: Context, uri: Uri): File? {
  * 传感器引导页用它：加速度计不需要运行时权限，但如果系统 / ROM 把传感器关了，
  * 用户只能在这里检查（路径见那一页底部的提示）。
  */
+@SuppressLint("WearRecents")
 private fun openAppSettings(context: Context) {
     val intent = Intent(
         Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -767,6 +794,7 @@ private fun openAppSettings(context: Context) {
  * FLAG_ACTIVITY_NEW_TASK —— Wear 的最近任务栈对这个标志很敏感，
  * 所以这里先把包装层剥开再判断。
  */
+@SuppressLint("WearRecents")
 private fun openAllFilesAccessSettings(context: Context) {
     val host = context.findActivity()
     val packageUri = Uri.fromParts("package", context.packageName, null)

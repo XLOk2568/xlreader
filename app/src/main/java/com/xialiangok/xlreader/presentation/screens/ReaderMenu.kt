@@ -93,6 +93,8 @@ private val TEXT_BRIGHTNESS_STEPS: List<Float> = buildList {
  *   回到的是**这个菜单**（而不是直接落回正文）；想带着菜单回来就得从这里进目录。
  * @param onBackToFileList 返回文件列表，和正文底部的「返回文件列表」走同一条路。
  *   想换一本书时不用说先回目录、再滚到目录页最底下点返回。
+ * @param onOpenSettings 打开设置页（和文件列表里的「设置」是同一页）。
+ *   这是「打开」不是「返回」：在设置页里返回时回到的是这一章、而不是文件列表。
  */
 @Composable
 fun ReaderMenuOverlay(
@@ -100,6 +102,7 @@ fun ReaderMenuOverlay(
     onPreferencesChange: (ReaderPreferences) -> Unit,
     onOpenCatalog: () -> Unit,
     onBackToFileList: () -> Unit,
+    onOpenSettings: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val update = rememberUpdatedState(onPreferencesChange)
@@ -138,7 +141,7 @@ fun ReaderMenuOverlay(
             ) {
                 Text(text = "关闭菜单", textAlign =TextAlign.Center)
             }
-            // 紧挨着「关闭菜单」：想翻目录、换章时，不必先关掉菜单再滚到本章末尾去找那个按钮。
+
             Button(
                 onClick = onOpenCatalog,
                 modifier = Modifier.fillMaxWidth(),
@@ -147,7 +150,7 @@ fun ReaderMenuOverlay(
             ) {
                 Text(text = "打开目录", textAlign =TextAlign.Center)
             }
-            // 紧挨着「打开目录」：想换一本书时，一步就能回到文件列表。
+
             Button(
                 onClick = onBackToFileList,
                 modifier = Modifier.fillMaxWidth(),
@@ -155,6 +158,15 @@ fun ReaderMenuOverlay(
                 colors = readerButtonColors(),
             ) {
                 Text(text = "返回文件列表", textAlign =TextAlign.Center)
+            }
+
+            Button(
+                onClick = onOpenSettings,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,          // 直角
+                colors = readerButtonColors(),
+            ) {
+                Text(text = "设置", textAlign =TextAlign.Center)
             }
             Spacer(Modifier.height(4.dp))
             // ---- 字号：和亮度、RGB 一样用「− / ＋」一次走一磅，直接显示磅值 ----
@@ -271,7 +283,7 @@ fun ReaderMenuOverlay(
                 shape = RectangleShape,          // 直角
                 colors = readerButtonColors(),
             ) {
-                Text("文字颜色恢复默认")
+                Text(text="文字颜色恢复默认", textAlign = TextAlign.Center)
             }
 
             Spacer(Modifier.height(20.dp))

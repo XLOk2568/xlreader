@@ -94,6 +94,7 @@ fun ChapterScreenPreview() {
             onSaveProgress = {},
             onOpenCatalog = {},
             onBackToFileList = {},
+            onOpenSettings = {},
             menuVisible = false,
             onMenuVisibleChange = {},
         )
@@ -109,6 +110,7 @@ fun ReaderMenuPreview() {
             onPreferencesChange = {},
             onOpenCatalog = {},
             onBackToFileList = {},
+            onOpenSettings = {},
             onDismiss = {},
         )
     }
