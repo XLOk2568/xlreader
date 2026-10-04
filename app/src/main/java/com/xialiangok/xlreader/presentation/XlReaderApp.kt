@@ -536,7 +536,7 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                     },
                     onOpenAbout = { route = Route.About },
                     // 退出本应用：finishAndRemoveTask 会把整个任务结束并从最近任务列表里移除，
-                    // 比只 finish 当前 Activity 更接近「退出」的字面意思。
+                    // 比只 finish 当前 Activity
                     onExitApp = {
                         store.saveBrowserDir(browserDir)
                         context.findActivity()?.finishAndRemoveTask()
