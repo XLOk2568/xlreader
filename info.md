@@ -23,7 +23,7 @@
 ## app/src/main/java/com/xialiangok/xlreader/data/OpenSourceLicenses.kt
 
 * 作用：列出应用随包一起分发或参考的开源项目（用于“关于 / 开源许可”页面）。
-* 主要符号：`OpenSourceProject` (data class)、`bundledOpenSourceProjects` 列表、`BUILD\\\_REFERENCE\\\_NOTE` 常量。
+* 主要符号：`OpenSourceProject` (data class)、`bundledOpenSourceProjects` 列表、`BUILD\\\\\\\\\\\\\\\_REFERENCE\\\\\\\\\\\\\\\_NOTE` 常量。
 * 细节/注意：清单来源注明为从 release APK 的 META-INF 中核对；维护时若增加/删除依赖，应同步更新此列表以保证界面一致性。
 
 \---
@@ -38,9 +38,9 @@
 
 ## app/src/main/java/com/xialiangok/xlreader/data/SettingsStore.kt
 
-* 作用：使用 `SharedPreferences` 持久化 `ReaderPreferences` 与浏览目录（`browser\\\_dir`）。
-* 主要符号：`SettingsStore` 类，`read()` / `save()` / `readBrowserDir()` / `saveBrowserDir()`。
-* 细节/注意：读取时对值做 `coerceIn`，写入采用 `edit{}`（异步 apply）。若改变存储格式，应设计迁移策略以免用户数据丢失。
+* 作用：使用 `SharedPreferences` 持久化 `ReaderPreferences`、浏览目录（`browser\\\\\\\\\\\\\\\_dir`）与最近打开的 epub 路径（`last\\\\\\\\\\\\\\\_book\\\\\\\\\\\\\\\_path`）。
+* 主要符号：`SettingsStore` 类，`read()` / `save()` / `readBrowserDir()` / `saveBrowserDir()` / `readLastBookPath()` / `saveLastBookPath()`。
+* 细节/注意：读取时对值做 `coerceIn`，写入采用 `edit{}`（异步 apply）。`last_book_path` 只用于启动时在文件列表里定位「最近打开」，不替代浏览目录的恢复逻辑。若改变存储格式，应设计迁移策略以免用户数据丢失。
 
 \---
 
@@ -52,11 +52,19 @@
 
 \---
 
+## app/src/main/java/com/xialiangok/xlreader/data/file/LatestMarker.kt
+
+* 作用：「最近打开的那本书」标记（`Latest.txt`）的读写。标记文件和 epub 并排放在同一层目录里，内容就是 epub 的绝对路径。
+* 主要符号：`LATEST_MARKER_NAME`、`latestMarkerFile()`、`FileEntry.isLatestMarker`、`latestMarkerEntry()`、`writeLatestMarker()`、`readLatestMarker()`。
+* 细节/注意：写失败静默（只是便利标记，不该让「返回文件列表」失败）；写时整文件覆写，没有行格式负担，用户可手改；读时若文件不在/内容为空/那本 epub 已不存在则返回 null，调用方据此什么都不做。
+
+\---
+
 ## app/src/main/java/com/xialiangok/xlreader/data/file/SettingsArchive.kt
 
-* 作用：实现设置导出/导入（把 `shared\\\_prefs` 打包成 zip 或从 zip 解回），并把导入后的 XML 写回 `SharedPreferences` 内存实例。
+* 作用：实现设置导出/导入（把整个应用数据目录 `com.xialiangok.xlreader` 连同它下面的所有子文件夹、子文件一起打包成 zip，或从 zip 解回），并把导入后的 XML 写回 `SharedPreferences` 内存实例。
 * 主要符号：`exportSettings(context,destDir): File`、`importSettings(context,zipFile): Int`、`applyPrefs(context)`、`readPrefsXml(file)`。
-* 细节/注意：导入会严格校验 zip 条目路径以防 Zip Slip；导入后调用 `applyPrefs` 用 `commit()` 将值同步落盘以便立即生效。
+* 细节/注意：zip 条目路径逐项校验以防 Zip Slip；导出文件名按用户口径是 `XLreader<年月日>_<时分>_Settings.zip`；导入后调用 `applyPrefs` 用 `commit()` 将值同步落盘以便立即生效。
 
 \---
 
@@ -78,8 +86,8 @@
 
 ## app/src/main/java/com/xialiangok/xlreader/data/epub/EpubIndex.kt
 
-* 作用：在解压目录保存/读取索引（`.xlreader\\\_index`），缓存解析结果以加速后续打开。
-* 主要符号：`EpubIndex` 对象、`IndexData` 数据类、`FILE\\\_NAME` 常量与 `load`/`save`。
+* 作用：在解压目录保存/读取索引（`.xlreader\\\\\\\\\\\\\\\_index`），缓存解析结果以加速后续打开。
+* 主要符号：`EpubIndex` 对象、`IndexData` 数据类、`FILE\\\\\\\\\\\\\\\_NAME` 常量与 `load`/`save`。
 * 细节/注意：索引只存元数据并绑定解压代次（generation）；格式有版本号，格式变动应升级 `VERSION` 并兼容或忽略旧索引。
 
 \---
@@ -91,7 +99,7 @@
 * 细节/注意：
 
   * 解压到同名目录（便于用户查看/删除），代价是更多磁盘使用；
-  * 使用 `.xlreader\\\_complete` 标记与 `.xlreader\\\_stamp` 记录版本信息；
+  * 使用 `.xlreader\\\\\\\\\\\\\\\_complete` 标记与 `.xlreader\\\\\\\\\\\\\\\_stamp` 记录版本信息；
   * 有安全保护：Zip Slip 检查、MAX\_TOTAL\_BYTES 限制、阶段性进度回调；
   * 解压失败/回滚逻辑与目录替换机制考虑了数据安全（先改名备份再替换）。
 
@@ -118,7 +126,7 @@
 
   * 为了容错真实世界 epub，刻意不用严格 XML 解析器，使用自写扫描与预编译的正则（缓存 Regex）；
   * 对超长段落按句末标点拆分以避免 Compose 布局卡顿；
-  * 实体解析可识别常用命名实体与数字实体，不识别的实体会丢弃以免正文出现 `\\\&foo;`。
+  * 实体解析可识别常用命名实体与数字实体，不识别的实体会丢弃以免正文出现 `\\\\\\\\\\\\\\\&foo;`。
 
 \---
 
@@ -154,7 +162,7 @@
 
   * 仅注册 accelerometer，并在应用层再次节流（因为设备 ODR 未必符合建议采样率）；
   * 支持多手势策略（默认只执行第一个命中项，也可 simultaneous 或 sequential）；
-  * 录制器最多收 `MAX\\\_SAMPLES`，并提供 `result()` 返回角度范围。
+  * 录制器最多收 `MAX\\\\\\\\\\\\\\\_SAMPLES`，并提供 `result()` 返回角度范围。
 
 \---
 
@@ -204,16 +212,16 @@
 
 ## app/src/main/java/com/xialiangok/xlreader/presentation/WearListScreen.kt
 
-* 作用：通用页面骨架（时间文本、LazyColumn 列表、滚动指示器、点击处理），并且追求“减少视觉动效”。
-* 主要符号：`WearListScreen` 可接收 `resetKey`/`startIndex`/`onTap`/`showScrollIndicator` 等参数。
-* 细节/注意：使用普通 `LazyColumn`（无缩放/渐变效果），在 `resetKey` 改变时跳回 `startIndex`；滚动指示条使用 `snap()` 而非 tween 动画。
+* 作用：通用页面骨架（时间文本、LazyColumn 列表、点击处理），并且追求“减少视觉动效”。
+* 主要符号：`WearListScreen` 可接收 `resetKey`/`startIndex`/`listState`/`onTap` 等参数。
+* 细节/注意：使用普通 `LazyColumn`（无缩放/渐变效果），在 `resetKey` 改变时跳回 `startIndex`；**不给 `ScreenScaffold` 传 `scrollState`**，于是时间文本没有 scrollAway 动效；`scrollIndicator` 恒传 `null`（全应用不显示滚动指示条——库只有在传了 `scrollState` 的分支里才会把指示条 align 到 CenterEnd，不传 `scrollState` 时指示条会落在左上角，所以干脆整条不要）。
 
 \---
 
 ## presentation/screens 中的 UI 页面（逐项摘要）
 
 * AboutScreen.kt：关于页，展示版本、应用说明，链接到 LicensesScreen；使用 `bundledOpenSourceProjects` 显示开源项目数量。
-* HomeScreen.kt（主页 / 文件浏览）：列出当前目录的子目录与 epub 文件，支持手势（单击＝打开中心项、返回＝上一级、翻页＝按条目滚动），IO 在协程中进行。
+* HomeScreen.kt（主页 / 文件浏览）：列出当前目录的子目录与 epub 文件，支持手势（单击＝打开中心项、返回＝上一级、翻页＝按条目滚动），IO 在协程中进行。另外把「最近打开」标记 `Latest.txt` 作为第一项列出（文件名用 rgb(204,91,246) 标色，点它打开里面记着的那本 epub）；应用启动后第一次进这一页会自动滚到它上面，标记不在时退回定位上次打开的那本 epub。
 * ChapterListScreen.kt（章节列表）：展示书名/作者/章节名，若有历史记录会显示“继续阅读”卡片并自动滚动到当前章节。
 * ChapterScreen.kt（正文页）：一次加载一章，支持图片按需降采样、阅读菜单（ReaderMenuOverlay）、阅读进度写入（延时 500ms 写一次）与手势绑定（单击弹菜单、系统返回为返回文件列表等）。
 * ReaderMenu.kt（阅读快捷菜单）：覆盖全屏、无淡入淡出、包含字号/段距/亮度/颜色/常亮等设置，修改后直接写回 `ReaderPreferences`；包含 `StepRow` 与 `StepButton` 的步进逻辑（长按连发）。

@@ -48,7 +48,7 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "版本 1.0.2611.3 · Wear OS\n最低支持 Android 11（API 30）\n以下为GPT5.6L生成",
+                text = "版本 1.0.2611.4 · Wear OS\n最低支持 Android 11（API 30）\n以下为GPT5.6L生成",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),

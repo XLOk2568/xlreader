@@ -46,9 +46,12 @@ import com.xialiangok.xlreader.presentation.theme.readerButtonColors
  * 「最近打开」那一项的文件名颜色：rgb(204, 91, 246)。
  *
  * 整个界面都是纯黑 + 灰阶，只有这一项带颜色 —— 打开应用时列表会自动滚到它上面，
- * 有颜色才能一眼从一列书名里认出「上次读的就是这本」。
+ * 有颜色才能一眼从一列书名里认出「上次读的就是这本」。（文件夹名另有 [FolderNameColor]。）
  */
 private val LatestMarkerColor = Color(0xFFCC5BF6)
+
+/** 文件夹条目的名字颜色：rgb(224, 159, 0)。用来和 .epub 文件一眼区分开。 */
+private val FolderNameColor = Color(0xFFE09F00)
 
 /** 列表里排在条目之前的固定项数：标题、路径、计数（有「上一级」按钮时再加一）。 */
 private const val ENTRY_HEADER_ITEMS = 3
@@ -246,8 +249,12 @@ private fun EntryCard(entry: FileEntry, onClick: () -> Unit) {
         Text(
             text = entry.name,
             style = MaterialTheme.typography.titleSmall,
-            // 只有「最近打开」那一项带颜色，其余都跟主题的 contentColor 走。
-            color = if (entry.isLatestMarker) LatestMarkerColor else Color.Unspecified,
+            // 「最近打开」用紫色、文件夹用橙色，其余都跟主题的 contentColor 走。
+            color = when {
+                entry.isLatestMarker -> LatestMarkerColor
+                entry.isDirectory -> FolderNameColor
+                else -> Color.Unspecified
+            },
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
