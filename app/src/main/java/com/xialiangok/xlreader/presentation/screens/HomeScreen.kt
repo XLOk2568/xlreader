@@ -25,14 +25,11 @@ import androidx.wear.compose.material3.ListSubHeader
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import com.xialiangok.xlreader.data.file.FileEntry
-import com.xialiangok.xlreader.data.file.LATEST_MARKER_NAME
 import com.xialiangok.xlreader.data.file.displayPath
+import com.xialiangok.xlreader.data.file.findLatestMarkerTarget
 import com.xialiangok.xlreader.data.file.formatSize
-import com.xialiangok.xlreader.data.file.isLatestMarker
-import com.xialiangok.xlreader.data.file.latestMarkerEntry
 import com.xialiangok.xlreader.data.file.listDirectory
 import com.xialiangok.xlreader.data.file.parentWithinRoot
-import com.xialiangok.xlreader.data.file.readLatestMarker
 import com.xialiangok.xlreader.presentation.BindGestureActions
 import com.xialiangok.xlreader.presentation.centeredItemKey
 import com.xialiangok.xlreader.presentation.scrollByItems
@@ -43,10 +40,11 @@ import java.io.File
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
 
 /**
- * 「最近打开」那一项的文件名颜色：rgb(204, 91, 246)。
+ * 「最近打开」那本书的名称颜色：rgb(204, 91, 246)。
  *
- * 整个界面都是纯黑 + 灰阶，只有这一项带颜色 —— 打开应用时列表会自动滚到它上面，
- * 有颜色才能一眼从一列书名里认出「上次读的就是这本」。（文件夹名另有 [FolderNameColor]。）
+ * 整个界面都是纯黑 + 灰阶，只有它（和文件夹的 [FolderNameColor]）带颜色 ——
+ * 打开应用时列表会自动滚到它上面，有颜色才能一眼从一列书名里认出「上次读的就是这本」。
+ * 标记文件本身不上色、也不进列表。
  */
 private val LatestMarkerColor = Color(0xFFCC5BF6)
 
@@ -59,16 +57,17 @@ private const val ENTRY_HEADER_ITEMS = 3
 /**
  * 主页：直接就是文件浏览器，进去看到的就是用户存储里的目录内容。
  *
- * 列出的是「当前目录 + 用户目录路径」，只显示子目录和 epub 文件；
- * 另外会把「最近打开」的标记（和 epub 并排的 `Latest.txt`）当成第一项一起列出来，
- * 它的文件名用 [LatestMarkerColor] 标出，点它就等于打开里面记着的那本书。
- *
+ * 列出的是「当前目录 + 用户目录路径」，只显示子目录和 epub 文件。
  * 点目录进去，点 epub 直接开读。
  *
+ * 目录里若有和书并排的 `xlrLatest.txt`（里面记着上次打开的那本 epub 的名字），
+ * 它指向的那本 epub 会被 [LatestMarkerColor] 标出来，启动时列表也自动滚到它上面；
+ * 标记文件自己不作为条目出现。
+ *
  * @param dirPath        当前所在目录的绝对路径。
- * @param lastBookPath   上次打开的那本 epub 的绝对路径；只在启动定位时兜底用，
+ * @param lastBookPath   上次打开的那本 epub 的绝对路径；只在标记不可用时兜底定位，
  *                       和「上次停在哪个目录」是两回事，不会改变进来的目录。
- * @param autoLocate     本次启动后第一次进文件列表：自动滚到 `Latest.txt` 上。
+ * @param autoLocate     本次启动后第一次进文件列表：自动滚到「最近打开」那本书上。
  * @param onAutoLocated  这次定位已经处理完（成功与否都算），调用方据此不再重复定位。
  * @param onOpenDirectory 进入子目录。
  * @param onOpenBook     打开一本电子书（绝对路径）。
@@ -90,39 +89,39 @@ fun HomeScreen(
 ) {
     var entries by remember(dirPath) { mutableStateOf<List<FileEntry>>(emptyList()) }
     var loading by remember(dirPath) { mutableStateOf(true) }
+    // 目录里「上次打开的那本书」；它就是要定位、要标色的那一项（找不到则为 null）。
+    var locatedPath by remember(dirPath) { mutableStateOf<String?>(null) }
 
-    // 列目录要走 IO 线程
+    // 列目录 + 认标记都要走 IO 线程
     LaunchedEffect(dirPath) {
         loading = true
-        entries = withContext(Dispatchers.IO) {
-            // 「最近打开」的标记排在所有条目的最前面：启动时要滚到它上面，
-            // 排最前的话一次滚动就落到列表开头附近，不会让列表莫名其妙跳到中间。
-            listOfNotNull(latestMarkerEntry(File(dirPath))) + listDirectory(File(dirPath))
+        val loaded = withContext(Dispatchers.IO) {
+            val listed = listDirectory(File(dirPath))
+            // 优先信 epub 旁边那份 xlrLatest.txt；标记不在、或它指的书已经不在这个目录里
+            // （被删 / 改名 / 挪走），再退回上次打开路径 —— 但同样必须能在列表里找到才作数。
+            val marked = findLatestMarkerTarget(File(dirPath), listed)?.path
+            val last = lastBookPath?.takeIf { path -> listed.any { it.path == path } }
+            listed to (marked ?: last)
         }
+        entries = loaded.first
+        locatedPath = loaded.second
         loading = false
     }
 
     val currentDir = remember(dirPath) { File(dirPath) }
     val parent = remember(dirPath) { parentWithinRoot(currentDir) }
     val folderCount = entries.count { it.isDirectory }
-    // 标记不是一本书，别把它算进「本电子书」的计数里。
-    val bookCount = entries.count { !it.isDirectory && !it.isLatestMarker }
+    val bookCount = entries.size - folderCount
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    // 打开应用后第一次进文件列表：自动滚到「最近打开」的标记上。
-    // 标记不在（被删了、或这个目录里根本没打开过书）就退回定位上次打开的那本 epub；
-    // 两个都不在这个目录里（例如用户换到了别的目录）就保持原位。
+    // 打开应用后第一次进文件列表：自动滚到「最近打开」的那本 epub 上。
+    // 标记与上次打开路径都落在这个目录里才滚，否则保持原位。
     // 注意这里**只动滚动位置、不动目录**：进来停在哪个目录仍然由上次浏览的位置决定。
-    LaunchedEffect(autoLocate, loading, entries) {
+    LaunchedEffect(autoLocate, loading, entries, locatedPath) {
         if (!autoLocate || loading) return@LaunchedEffect
-        val target = if (entries.any { it.isLatestMarker }) {
-            File(dirPath, LATEST_MARKER_NAME).absolutePath
-        } else {
-            lastBookPath
-        }
-        val index = entries.indexOfFirst { it.path == target }
+        val index = locatedPath?.let { path -> entries.indexOfFirst { it.path == path } } ?: -1
         if (index >= 0) {
             // 条目前面还有标题 / 路径 / 计数（可能还有「上一级」），都要算进下标里。
             val offset = ENTRY_HEADER_ITEMS + if (parent != null) 1 else 0
@@ -132,17 +131,9 @@ fun HomeScreen(
         onAutoLocated()
     }
 
-    /** 打开一个条目：标记文件里记的是 epub 路径，点它等于打开那本书。 */
+    /** 打开一个条目。 */
     fun openEntry(entry: FileEntry) {
-        when {
-            entry.isDirectory -> onOpenDirectory(entry.path)
-            entry.isLatestMarker -> scope.launch {
-                val target = withContext(Dispatchers.IO) { readLatestMarker(File(entry.path)) }
-                if (target != null) onOpenBook(target)
-            }
-
-            else -> onOpenBook(entry.path)
-        }
+        if (entry.isDirectory) onOpenDirectory(entry.path) else onOpenBook(entry.path)
     }
 
     // 体感手势：单击 = 打开屏幕上正中央的那一项（列表项用路径当 key，正好能反查回条目）
@@ -218,6 +209,7 @@ fun HomeScreen(
         items(entries, key = { it.path }, contentType = { if (it.isDirectory) "dir" else "book" }) { entry ->
             EntryCard(
                 entry = entry,
+                highlighted = entry.path == locatedPath,
                 onClick = { openEntry(entry) },
             )
         }
@@ -244,14 +236,14 @@ fun HomeScreen(
 }
 
 @Composable
-private fun EntryCard(entry: FileEntry, onClick: () -> Unit) {
+private fun EntryCard(entry: FileEntry, highlighted: Boolean, onClick: () -> Unit) {
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Text(
             text = entry.name,
             style = MaterialTheme.typography.titleSmall,
-            // 「最近打开」用紫色、文件夹用橙色，其余都跟主题的 contentColor 走。
+            // 「最近打开」的那本书用紫色、文件夹用橙色，其余都跟主题的 contentColor 走。
             color = when {
-                entry.isLatestMarker -> LatestMarkerColor
+                highlighted -> LatestMarkerColor
                 entry.isDirectory -> FolderNameColor
                 else -> Color.Unspecified
             },

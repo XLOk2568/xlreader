@@ -68,7 +68,7 @@ class SettingsStore(context: Context) {
      * 最近一次打开的那本 epub；没记录过返回 null。
      *
      * 这**不是**「上次停在哪个目录」的替代品：目录仍然走 [readBrowserDir] 那一套。
-     * 它只用来给文件列表做一次启动定位 —— 和书并排的 Latest.txt 万一被删了，
+     * 它只用来给文件列表做一次启动定位 —— 和书并排的 xlrLatest.txt 万一被删了，
      * 还能退回「上次打开的那本书」这个位置。
      */
     fun readLastBookPath(): String? = prefs.getString(KEY_LAST_BOOK, null)

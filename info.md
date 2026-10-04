@@ -54,9 +54,9 @@
 
 ## app/src/main/java/com/xialiangok/xlreader/data/file/LatestMarker.kt
 
-* 作用：「最近打开的那本书」标记（`Latest.txt`）的读写。标记文件和 epub 并排放在同一层目录里，内容就是 epub 的绝对路径。
-* 主要符号：`LATEST_MARKER_NAME`、`latestMarkerFile()`、`FileEntry.isLatestMarker`、`latestMarkerEntry()`、`writeLatestMarker()`、`readLatestMarker()`。
-* 细节/注意：写失败静默（只是便利标记，不该让「返回文件列表」失败）；写时整文件覆写，没有行格式负担，用户可手改；读时若文件不在/内容为空/那本 epub 已不存在则返回 null，调用方据此什么都不做。
+* 作用：「最近打开的那本书」标记（`xlrLatest.txt`）的读写。标记文件和 epub 并排放在同一层目录里，内容只写 epub 的**文件名**（不是完整路径，所以整个目录连书一起挪走标记仍然有效）。
+* 主要符号：`XLR_LATEST_MARKER_NAME`、`latestMarkerFile()`、`writeLatestMarker()`、`readLatestMarkerName()`、`findLatestMarkerTarget()`。
+* 细节/注意：写失败静默（只是便利标记，不该让「返回文件列表」失败），整文件覆写。标记文件**本身不进文件列表**：`findLatestMarkerTarget` 用它按文件名在目录列表里找出那本 epub，启动定位与紫色着色都落在这本 epub 上；标记不在 / 内容为空 / 那本书已不在该目录时返回 null，调用方退回「上次打开路径」兜底。会读文件，须在 IO 线程调用。
 
 \---
 
@@ -221,7 +221,7 @@
 ## presentation/screens 中的 UI 页面（逐项摘要）
 
 * AboutScreen.kt：关于页，展示版本、应用说明，链接到 LicensesScreen；使用 `bundledOpenSourceProjects` 显示开源项目数量。
-* HomeScreen.kt（主页 / 文件浏览）：列出当前目录的子目录与 epub 文件，支持手势（单击＝打开中心项、返回＝上一级、翻页＝按条目滚动），IO 在协程中进行。另外把「最近打开」标记 `Latest.txt` 作为第一项列出（文件名用 rgb(204,91,246) 标色，点它打开里面记着的那本 epub）；应用启动后第一次进这一页会自动滚到它上面，标记不在时退回定位上次打开的那本 epub。
+* HomeScreen.kt（主页 / 文件浏览）：列出当前目录的子目录与 epub 文件，支持手势（单击＝打开中心项、返回＝上一级、翻页＝按条目滚动），IO 在协程中进行。文件名着色：文件夹用 rgb(224,159,0)，「最近打开」的那本 epub 用 rgb(204,91,246)（由 xlrLatest.txt 按文件名指认，标记文件本身不进列表）；应用启动后第一次进这一页会自动滚到那本 epub 上，标记不可用时退回定位上次打开路径。
 * ChapterListScreen.kt（章节列表）：展示书名/作者/章节名，若有历史记录会显示“继续阅读”卡片并自动滚动到当前章节。
 * ChapterScreen.kt（正文页）：一次加载一章，支持图片按需降采样、阅读菜单（ReaderMenuOverlay）、阅读进度写入（延时 500ms 写一次）与手势绑定（单击弹菜单、系统返回为返回文件列表等）。
 * ReaderMenu.kt（阅读快捷菜单）：覆盖全屏、无淡入淡出、包含字号/段距/亮度/颜色/常亮等设置，修改后直接写回 `ReaderPreferences`；包含 `StepRow` 与 `StepButton` 的步进逻辑（长按连发）。
