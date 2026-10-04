@@ -123,14 +123,16 @@ object EpubParser {
 
                 is RawBlock.Image -> {
                     val resolved = resolvePath(baseDir, block.src)
-                    val imageFile = File(book.dir, resolved)
+                    val imageFile = imageFileIn(book.dir, resolved)
+                    // 给用户看的还是书里写的那个名字，不带我们加的解压后缀。
+                    val displayName = resolved.substringAfterLast('/')
                     when {
                         // BitmapFactory 解不了矢量图，明确告诉用户，而不是静默漏掉。
                         isSvg(resolved, book.svgPaths) ->
-                            EpubBlock.Unsupported(imageFile.name, "SVG 矢量图暂不支持")
+                            EpubBlock.Unsupported(displayName, "SVG 矢量图暂不支持")
 
                         !imageFile.isFile ->
-                            EpubBlock.Unsupported(imageFile.name, "图片文件缺失")
+                            EpubBlock.Unsupported(displayName, "图片文件缺失")
 
                         else -> EpubBlock.Image(imageFile)
                     }
@@ -143,6 +145,21 @@ object EpubParser {
         path in svgPaths ||
             path.endsWith(".svg", ignoreCase = true) ||
             path.endsWith(".svgz", ignoreCase = true)
+
+    /**
+     * 找出图片在解压目录里的实际文件。
+     *
+     * 解压时图片被加了 [EpubExtractor.IMAGE_SUFFIX] 结尾（`pic.jpg` → `pic.jpg.xlr`），
+     * 所以磁盘上的名字和 `<img src>` 里写的并不一样。先按原名找，找不到再试带后缀的名字。
+     *
+     * 「先试原名」同时照顾了升级前解压的旧缓存：那些目录里图片还是原名，照样能读。
+     * 两次都找不到就返回原名那个（不存在）的 File，交给调用方报「图片文件缺失」。
+     */
+    private fun imageFileIn(dir: File, path: String): File {
+        val plain = File(dir, path)
+        if (plain.isFile) return plain
+        return File(dir, path + EpubExtractor.IMAGE_SUFFIX).takeIf { it.isFile } ?: plain
+    }
 }
 
 /** manifest 里的一项。 */

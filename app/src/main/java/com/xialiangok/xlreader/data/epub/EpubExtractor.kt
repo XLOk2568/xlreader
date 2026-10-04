@@ -66,6 +66,30 @@ internal object EpubExtractor {
     fun targetDirFor(epub: File): File =
         File(epub.parentFile, epub.nameWithoutExtension)
 
+    /**
+     * 解压出来的图片统一加这个结尾：`pic.jpg` → `pic.jpg.xlr`。
+     *
+     * 加完之后文件的**最终扩展名**不再是 `jpg` 这类媒体格式，系统媒体库（相册、
+     * 图片选择器）就认不出它是图片，不会把书本自带的插图收进去。
+     * 刻意不写成 `pic.xlr.jpg` —— 那样结尾还是 jpg，媒体库照样会收。
+     *
+     * 代价是图片不能再按 `<img src>` 里的原名找，见 [EpubParser.loadChapter] 的兜底查找；
+     * 正文、样式、字体等条目一律原样落盘，路径必须保持原样给解析器用。
+     */
+    const val IMAGE_SUFFIX = ".xlr"
+
+    /** 会被媒体库当成图片收走的扩展名。只有它们需要加 [IMAGE_SUFFIX]。 */
+    private val IMAGE_EXTENSIONS = setOf(
+        "jpg", "jpeg", "png", "gif", "webp", "bmp",
+        "heic", "heif", "avif", "tif", "tiff", "svg", "svgz",
+    )
+
+    /** 某个 zip 条目落盘时该用的文件名。 */
+    private fun outputNameOf(entryName: String): String {
+        val extension = entryName.substringAfterLast('/').substringAfterLast('.', "")
+        return if (extension.lowercase() in IMAGE_EXTENSIONS) entryName + IMAGE_SUFFIX else entryName
+    }
+
     private fun markerOf(dir: File) = File(dir, MARKER)
 
     /** 判断是否为一次完整的解压结果。 */
@@ -270,7 +294,8 @@ internal object EpubExtractor {
                 val name = entry.name.replace('\\', '/').removePrefix("./")
                 if (name.isEmpty()) continue
 
-                val out = File(target, name)
+                // 图片加 [IMAGE_SUFFIX] 落盘（免得被系统媒体库收录），其余条目原样。
+                val out = File(target, outputNameOf(name))
                 // 防 Zip Slip：条目名里带 `../` 或绝对路径时会落到目录之外。
                 if (!out.canonicalPath.startsWith(rootPrefix)) {
                     throw EpubParseException("EPUB 内含非法路径：${entry.name}")

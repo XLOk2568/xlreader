@@ -339,15 +339,39 @@ class EpubParserTest {
         assertEquals("前", (blocks[0] as EpubBlock.Text).text)
 
         val image = blocks[1] as EpubBlock.Image
-        // 图片路径要相对章节所在目录解析到解压目录里。
-        assertEquals("pic.jpg", image.file.name)
+        // 图片路径要相对章节所在目录解析到解压目录里；落盘时又加了 .xlr 结尾（防媒体库收录）。
+        val dir = EpubExtractor.targetDirFor(epub)
         assertEquals(
-            File(EpubExtractor.targetDirFor(epub), "OEBPS/images/pic.jpg").absolutePath,
+            File(dir, "OEBPS/images/pic.jpg.xlr").absolutePath,
             image.file.absolutePath,
         )
         assertTrue(image.file.isFile)
+        assertFalse("加后缀后不该再留下原名那份", File(dir, "OEBPS/images/pic.jpg").exists())
 
         assertEquals("后", (blocks[2] as EpubBlock.Text).text)
+    }
+
+    /** 第二次打开走「索引缓存」那条路时，图片仍要能按加过后缀的名字找到。 */
+    @Test
+    fun `images still load when reopening from the cached extraction`() {
+        val epub = epub(
+            "META-INF/container.xml" to container("OEBPS/content.opf"),
+            "OEBPS/content.opf" to opf("书", "人", listOf("c1" to "text/c1.xhtml"), listOf("c1")),
+            "OEBPS/text/c1.xhtml" to "<html><body><img src=\"../images/pic.jpg\"/></body></html>",
+            "OEBPS/images/pic.jpg" to "not-a-real-jpeg",
+        )
+
+        // 第一次打开：解压并写下索引。
+        EpubParser.open(epub)
+        val dir = EpubExtractor.targetDirFor(epub)
+        assertTrue("第一次打开后应当写好索引", File(dir, EpubIndex.FILE_NAME).isFile)
+
+        // 第二次打开：命中索引，连原 epub 都不再打开，图片照样要能读出来。
+        val image = EpubParser.open(epub).loadChapter(0)
+            .filterIsInstance<EpubBlock.Image>().single()
+
+        assertEquals("pic.jpg.xlr", image.file.name)
+        assertTrue(image.file.isFile)
     }
 
     /** SVG 不加载，但必须给一个明确的占位，而不是静默漏掉。 */
@@ -397,7 +421,7 @@ class EpubParserTest {
 
         val image = EpubParser.open(epub).loadChapter(0)
             .filterIsInstance<EpubBlock.Image>().single()
-        assertEquals("pic.png", image.file.name)
+        assertEquals("pic.png.xlr", image.file.name)
     }
 
     @Test
