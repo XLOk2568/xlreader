@@ -14,16 +14,14 @@ import java.util.zip.ZipOutputStream
 /**
  * 设置的导入导出。
  *
- * 本应用的设置只有两处落盘的文件：`shared_prefs/xlreader_settings.xml`（字号、段间距、
- * 上次目录…）与 `shared_prefs/xlreader_sensor.xml`（体感手势那一份 JSON）。
- * 所以「导出设置」就是把 `shared_prefs` 整个打包成 zip，「导入设置」就是把它解回原处。
+ * 「导出设置」把整个应用私有数据目录（`/data/user/0/<包名>`，即 `com.xialiangok.xlreader`）
+ * 连同它下面的所有子文件夹、子文件一起打包成 zip；「导入设置」再把它整个解回原处。
+ * 早先只打包 `shared_prefs`，但设置、解压出来的书、索引缓存都散在数据目录各处，
+ * 整个目录一起带走才算真的备份完整。
  *
  * 打包解包都用 JDK 自带的 `java.util.zip`，不引第三方库 —— 与项目零依赖的取向一致。
  */
 private const val PREFS_DIR = "shared_prefs"
-
-/** 只允许还原这两类目录：设置文件本身，以及应用自己放在 files 下的东西。 */
-private val RESTORE_PREFIXES = listOf("$PREFS_DIR/", "files/")
 
 /** 应用私有数据目录（`/data/user/0/<包名>`）。 */
 fun appDataDir(context: Context): File = context.dataDir
@@ -45,35 +43,55 @@ fun parentWithinDataDir(current: File, root: File): File? =
     if (current.absolutePath == root.absolutePath) null else current.parentFile
 
 /**
- * 把设置打包到 [destDir]，返回生成的 zip。
+ * 把整个数据目录打包到 [destDir]，返回生成的 zip。
  *
- * 文件名按用户口径是「XLreader + 年月日时分」，落在用户主文件目录（内部存储根），
- * 这样紧接着的「导入设置」页在同一层就能看到它。
+ * 文件名按用户口径是「XLreader + 年月日 + _ + 时分 + _Settings」，落在用户主文件目录
+ * （内部存储根），这样紧接着的「导入设置」页在同一层就能看到它。
  */
 fun exportSettings(context: Context, destDir: File): File {
-    val stamp = SimpleDateFormat("yyyyMMddHHmm", Locale.US).format(Date())
-    val target = File(destDir, "XLreader$stamp.zip")
+    val root = appDataDir(context).canonicalFile
+    val stamp = SimpleDateFormat("yyyyMMdd'_'HHmm", Locale.US).format(Date())
+    val target = File(destDir, "XLreader${stamp}_Settings.zip")
     if (target.exists()) target.delete()
 
     ZipOutputStream(target.outputStream().buffered()).use { zip ->
-        val prefsDir = File(appDataDir(context), PREFS_DIR)
-        prefsDir.listFiles()
-            ?.filter { it.isFile }
-            ?.sortedBy { it.name }
-            ?.forEach { file ->
-                zip.putNextEntry(ZipEntry("$PREFS_DIR/${file.name}"))
-                file.inputStream().use { it.copyTo(zip) }
-                zip.closeEntry()
-            }
+        dataFiles(root).forEach { file ->
+            // zip 里的路径用正斜杠；解包端也按这个约定还原。
+            val name = file.relativeTo(root).path.replace(File.separatorChar, '/')
+            zip.putNextEntry(ZipEntry(name))
+            file.inputStream().use { it.copyTo(zip) }
+            zip.closeEntry()
+        }
     }
     return target
 }
 
 /**
+ * 递归列出数据目录里要打包的所有文件。
+ *
+ * 只收 canonical 路径仍在数据目录内的东西：`lib` 是系统指到 `/data/app/.../lib` 的符号链接，
+ * 跟着走会把整个原生库目录也塞进包里；顺带保证 zip 条目名一定落在数据目录之内。
+ */
+private fun dataFiles(root: File): List<File> =
+    root.listFiles()
+        ?.sortedBy { it.name }
+        ?.flatMap { file ->
+            when {
+                file.isDirectory -> {
+                    val canonical = runCatching { file.canonicalFile }.getOrNull()
+                    if (canonical != null && canonical.startsWith(root)) dataFiles(canonical) else emptyList()
+                }
+                file.isFile -> listOf(file)
+                else -> emptyList()
+            }
+        }
+        .orEmpty()
+
+/**
  * 把 zip 里的内容解压回数据目录（覆盖同名文件），返回还原的文件数。
  *
- * 只认 [RESTORE_PREFIXES] 这两类路径，且逐项做路径检查：zip 里的 `../` 不能跑到
- * 数据目录外面去（zip-slip）。
+ * zip 里是什么路径就还原成什么路径（整个数据目录的镜像），但逐项做路径检查：
+ * 条目必须 canonical 后仍落在数据目录内，`../` 跑不到外面去（zip-slip）。
  *
  * 解压只是把文件放回原位，**内存里那份 SharedPreferences 还是旧值**，所以最后要把
  * [PREFS_DIR] 下的 XML 再按原样写回一次（见 [applyPrefs]），不重启就能生效。
@@ -89,8 +107,6 @@ fun importSettings(context: Context, zipFile: File): Int {
             if (entry.isDirectory) continue
 
             val name = entry.name.replace('\\', '/')
-            if (RESTORE_PREFIXES.none { name.startsWith(it) }) continue
-
             val target = File(root, name).canonicalFile
             if (!target.path.startsWith(root.path + File.separator)) continue
 

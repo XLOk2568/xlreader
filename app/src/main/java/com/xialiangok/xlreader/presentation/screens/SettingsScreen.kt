@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
@@ -150,7 +149,15 @@ fun SettingsScreen(
                 Text(text = "传感器设置", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
-
+        item {
+            ListSubHeader {
+                Text(
+                    text = "备份与还原",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
         item {
             // 备份与还原：进自己的 data 目录做文件操作，以及导出/导入设置 zip。
             Button(

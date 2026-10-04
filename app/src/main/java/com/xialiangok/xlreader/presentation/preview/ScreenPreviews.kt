@@ -48,6 +48,10 @@ fun HomeScreenPreview() {
     XlReaderTheme {
         HomeScreen(
             dirPath = "/storage/emulated/0",
+            lastBookPath = null,
+            // 预览里没必要做启动定位，也就不必回调。
+            autoLocate = false,
+            onAutoLocated = {},
             onOpenDirectory = {},
             onOpenBook = {},
             onNavigateUp = {},

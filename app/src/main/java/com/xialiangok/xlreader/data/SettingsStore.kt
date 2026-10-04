@@ -64,10 +64,26 @@ class SettingsStore(context: Context) {
         prefs.edit { putString(KEY_BROWSER_DIR, path) }
     }
 
+    /**
+     * 最近一次打开的那本 epub；没记录过返回 null。
+     *
+     * 这**不是**「上次停在哪个目录」的替代品：目录仍然走 [readBrowserDir] 那一套。
+     * 它只用来给文件列表做一次启动定位 —— 和书并排的 Latest.txt 万一被删了，
+     * 还能退回「上次打开的那本书」这个位置。
+     */
+    fun readLastBookPath(): String? = prefs.getString(KEY_LAST_BOOK, null)
+
+    /** 记下最近一次打开的 epub。 */
+    fun saveLastBookPath(path: String) {
+        prefs.edit { putString(KEY_LAST_BOOK, path) }
+    }
+
     companion object {
         private const val PREFS_NAME = "xlreader_settings"
         // 文件浏览器上次停留在哪个目录（应用重启后从它继续，而不是回到存储根）。
         private const val KEY_BROWSER_DIR = "browser_dir"
+        // 最近一次打开的 epub，仅用于启动时在文件列表里定位（见 readLastBookPath）。
+        private const val KEY_LAST_BOOK = "last_book_path"
         // 字号曾经是 0..2 的档位，存的是另一套键；换成磅值后直接换个键，
         // 免得旧的 "0/1/2" 被当成 1 磅、2 磅读出来（那是根本看不见的字）。
         private const val KEY_FONT = "font_size"

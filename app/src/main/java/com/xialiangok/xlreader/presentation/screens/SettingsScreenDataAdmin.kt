@@ -2,9 +2,13 @@ package com.xialiangok.xlreader.presentation.screens
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,12 +18,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.Card
 import androidx.wear.compose.material3.ListHeader
@@ -32,7 +38,6 @@ import com.xialiangok.xlreader.data.file.exportSettings
 import com.xialiangok.xlreader.data.file.formatSize
 import com.xialiangok.xlreader.data.file.importSettings
 import com.xialiangok.xlreader.data.file.listDataDirectory
-import com.xialiangok.xlreader.data.file.parentWithinDataDir
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -46,7 +51,7 @@ import java.io.File
  * `shared_prefs` 下。列表里单击：文件夹进去、文件选中；下面对选中的那项做删除 / 复制，
  * 「粘贴」把复制过的那份放回当前目录（同名覆盖）。
  *
- * 底部是导入 / 导出：导出把设置打包进用户主文件目录，导入从那里挑一个 zip 还原回来。
+ * 底部是导入 / 导出：导出把整个数据目录打包进用户主文件目录，导入从那里挑一个 zip 还原回来。
  */
 @Composable
 fun SettingsDataAdminScreen(
@@ -65,6 +70,8 @@ fun SettingsDataAdminScreen(
     var selected by remember { mutableStateOf<String?>(null) }
     // 复制过的那一项（绝对路径）；粘贴就是把它拷进当前目录。
     var clipboard by remember { mutableStateOf<String?>(null) }
+    // 正在问「复制到哪儿」的那一项（绝对路径）；非 null 就弹询问框。
+    var choosingDestination by remember { mutableStateOf<String?>(null) }
     // 删除 / 粘贴之后 +1，让列表重新读一遍磁盘。
     var revision by remember { mutableIntStateOf(0) }
     var exporting by remember { mutableStateOf(false) }
@@ -77,7 +84,17 @@ fun SettingsDataAdminScreen(
 
     val currentDir = remember(dirPath) { File(dirPath) }
     val rootDir = remember(dataDirPath) { File(dataDirPath) }
-    val parent = remember(dirPath) { parentWithinDataDir(currentDir, rootDir) }
+    // 内部存储根目录。它会成为第二个可浏览的根：「复制到 internal storage」就是跳到这儿。
+    val storageRoot = remember { File(defaultRootPath()) }
+    // 两个根互相连通：数据目录根部没有上一级，内部存储根部再往上就回到数据目录 ——
+    // 否则跳进内部存储之后就没有回数据目录的入口了。
+    val parent = remember(dirPath, rootDir, storageRoot) {
+        when (currentDir.absolutePath) {
+            rootDir.absolutePath -> null
+            storageRoot.absolutePath -> rootDir
+            else -> currentDir.parentFile
+        }
+    }
     val selectedFile = selected?.let(::File)
 
     fun toast(message: String) {
@@ -197,8 +214,8 @@ fun SettingsDataAdminScreen(
                 onClick = {
                     val file = selectedFile ?: return@Button toast("先选中一个文件")
                     if (file.isDirectory) return@Button toast("文件夹不能复制")
-                    clipboard = file.absolutePath
-                    toast("已复制 ${file.name}")
+                    // 先问放哪儿，选完目的地才真的记进剪贴板。
+                    choosingDestination = file.absolutePath
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
@@ -249,7 +266,7 @@ fun SettingsDataAdminScreen(
 
         item { ListSubHeader { Text("设置备份", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) } }
         item {
-            // 导出到用户主文件目录（内部存储根），导入页在同一层就能看到这个 zip。
+            // 导出整个数据目录到用户主文件目录（内部存储根），导入页在同一层就能看到这个 zip。
             Button(
                 onClick = {
                     if (exporting) return@Button
@@ -259,7 +276,7 @@ fun SettingsDataAdminScreen(
                             runCatching { exportSettings(context, File(defaultRootPath())) }.getOrNull()
                         }
                         exporting = false
-                        toast(if (file != null) "已导出 ${file.name}" else "导出失败")
+                        toast(if (file != null) "已导出 ${file.name}至内部存储目录" else "导出失败")
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -292,6 +309,57 @@ fun SettingsDataAdminScreen(
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
+    }
+
+    // 「复制到哪儿」的询问框：点「复制」后弹出来，三行从上到下铺开
+    // （问题文字 + 两个目的地），上下各留 32dp、行与行之间 6dp，按钮撑满宽度、文字居中。
+    val copySource = choosingDestination
+    if (copySource != null) {
+        Dialog(onDismissRequest = { choosingDestination = null }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .padding(vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "Where do you want to copy it ",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(
+                    onClick = {
+                        // app storage：目录保持当前、不做别的处理，粘贴时落在当前目录。
+                        clipboard = copySource
+                        choosingDestination = null
+                        toast("已复制 ${File(copySource).name}")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RectangleShape,
+                    colors = readerButtonColors(),
+                ) {
+                    Text("app storage", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                }
+                Button(
+                    onClick = {
+                        // internal storage：跳到内部存储目录，接着就在那儿粘贴。
+                        clipboard = copySource
+                        choosingDestination = null
+                        selected = null
+                        dirPath = storageRoot.absolutePath
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RectangleShape,
+                    colors = readerButtonColors(),
+                ) {
+                    Text("internal storage", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
     }
 }
 

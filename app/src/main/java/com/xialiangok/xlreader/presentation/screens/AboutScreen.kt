@@ -79,7 +79,8 @@ fun AboutScreen(
                 text = "1.增加保持上次打开Path功能\n"+
                         "2.修改目录逻辑\n"+
                         "3.修改部分ui\n"+
-                        "4.修复手势和优化手势体感",
+                        "4.修复手势和优化手势体感"+
+                        "5.优化了导出导入设置的复制功能",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

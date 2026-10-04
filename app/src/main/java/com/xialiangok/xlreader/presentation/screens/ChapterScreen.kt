@@ -82,7 +82,7 @@ private sealed interface ImageState {
  *
  * 与普通页面相比有几处不同：
  * - **不显示时间**（`timeText = {}`），把顶部空间让给正文；
- * - **不显示右侧的滚动指示条**（`showScrollIndicator = false`），正文两侧不留装饰；
+ * - 滚动指示条全应用都不显示（见 [WearListScreen]），正文两侧不留装饰；
  * - **单击正文弹出快捷设置菜单**，可在菜单里直接改字号、常亮、屏幕亮度、文字亮度、文字颜色，
  *   改的就是设置页那份数据，改完立即生效在正文上；
  * - 阅读位置写在书的 `history.txt`，但**只在四个时机写**：加载完这一章 500ms（仅一次）、
@@ -289,9 +289,6 @@ private fun ChapterBody(
         WearListScreen(
             // 阅读界面不要时间，顶部空间留给正文。
             timeText = {},
-            // 也不要右侧那条滚动指示条：它会影响正文的边距和观感，
-            // 阅读页靠滚动本身就能感知进度。
-            showScrollIndicator = false,
             resetKey = chapterIndex,
             startIndex = startItem,
             listState = listState,

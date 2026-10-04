@@ -34,6 +34,7 @@ import com.xialiangok.xlreader.data.file.defaultRootPath
 import com.xialiangok.xlreader.data.file.appDataDir
 import com.xialiangok.xlreader.data.file.hasAllFilesAccess
 import com.xialiangok.xlreader.data.file.parentWithinRoot
+import com.xialiangok.xlreader.data.file.writeLatestMarker
 import com.xialiangok.xlreader.data.sensor.GestureAction
 import com.xialiangok.xlreader.data.sensor.GesturePage
 import com.xialiangok.xlreader.data.sensor.SensorGesture
@@ -168,6 +169,17 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
         browserDir = path
         store.saveBrowserDir(path)
     }
+
+    /**
+     * 上次打开的那本 epub 的路径，启动时读一次就够。
+     *
+     * 它和 [browserDir] 是两码事：目录照旧由上次浏览的位置决定，这份路径只用来给文件列表
+     * 做启动定位（和书并排的 `Latest.txt` 万一被删了，退回定位到这本书上）。
+     */
+    val lastBookPath = remember { store.readLastBookPath() }
+
+    /** 本次启动后是否还没做过「最近打开」的定位；文件列表第一次进来时用一次，之后置 false。 */
+    var locateOnLaunch by remember { mutableStateOf(true) }
 
     var pendingPath by remember { mutableStateOf<String?>(null) }
     var bookState by remember { mutableStateOf<BookState>(BookState.Loading) }
@@ -341,6 +353,21 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
             }
     }
 
+    /**
+     * 记下「最近打开的这本 epub」。
+     *
+     * 两件事一起做：在 epub 所在目录里写一份 `Latest.txt`（内容就是它的绝对路径，
+     * 每次整文件覆写 —— 它就是文件列表里那个带颜色的定位标记），
+     * 再把路径记进本地设置：标记被用户删掉或挪走时，启动定位还能退回这本书上。
+     *
+     * 和阅读进度一样用根组件的作用域落盘：离开正文页时页面自己的协程已经被取消，
+     * 但这一笔写完才算真的「离开这本书」。
+     */
+    fun rememberLatestBook(source: File) {
+        store.saveLastBookPath(source.absolutePath)
+        appScope.launch(Dispatchers.IO) { writeLatestMarker(source) }
+    }
+
     /** 从正文页打开章节目录：先落盘，再切页面，并记下是从哪一章进来的。 */
     fun openCatalog(book: EpubBook, chapterIndex: Int) {
         saveProgressOnLeave(book, chapterIndex)
@@ -368,6 +395,8 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
     /** 从正文页返回文件列表（正文里的按钮与系统返回手势）：同样先落盘。 */
     fun backToFileList(book: EpubBook, chapterIndex: Int) {
         saveProgressOnLeave(book, chapterIndex)
+        // 离开正文页 = 离开这本书：把「最近打开」的标记写到它旁边。
+        rememberLatestBook(book.sourceFile)
         // 已经离开正文页了，菜单状态留着会让下一本书一进来就弹菜单。
         readerMenuVisible = false
         route = Route.Browser
@@ -474,6 +503,9 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
 
                 Route.Browser -> HomeScreen(
                     dirPath = browserDir,
+                    lastBookPath = lastBookPath,
+                    autoLocate = locateOnLaunch,
+                    onAutoLocated = { locateOnLaunch = false },
                     onOpenDirectory = { setBrowserDir(it) },
                     onOpenBook = { path ->
                         pendingPath = path
@@ -542,6 +574,8 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                             // 从阅读菜单进来的话，readerMenuVisible 还是 true，于是回到那个菜单。
                             onBack = { closeCatalog() },
                             onBackToFileList = {
+                                // 从目录页直接离开这本书也算「最近打开」，和正文页那条路一致。
+                                rememberLatestBook(state.book.sourceFile)
                                 readerMenuVisible = false
                                 route = Route.Browser
                             },

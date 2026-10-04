@@ -76,6 +76,17 @@ fun LicensesScreen(onBack: () -> Unit) {
             )
         }
 
+        item { ListSubHeader { Text("404", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
+        item {
+            Text(
+                text = ""+"\n",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
         item { Spacer(Modifier.height(10.dp)) }
         item {
             Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape = RectangleShape,colors = readerButtonColors()) {
