@@ -229,6 +229,63 @@ internal object EpubExtractor {
     }
 
     /**
+     * 增量更新解压结果：只把「和缓存里对不上」的条目补写进去，另外清掉新版里已经没有的文件。
+     *
+     * 为什么不让用户重新完整解压：原书更新通常只动了目录和少数章节，整本重解压要把几百 MB
+     * 的正文和插图重新写一遍，在手表上是要等很久的。这里按「同名文件大小和包内条目一致就
+     * 认为没变」判定条目没变，只解压变了的那些，进度条也就只反映真正要写出去的那部分。
+     *
+     * 缓存内容变了，完成标记会换一个新代次：绑在旧代次上的解析索引（[EpubIndex]）自然作废，
+     * 下次解析会按新内容重新读一遍 OPF 与目录，不会拿着旧章节表去读新文件。
+     *
+     * 没有完整缓存可增量时退化成整本解压（等价于 [ensureExtracted] 的 `force = true`）。
+     * 阅读进度（`history.txt`）不受影响。
+     *
+     * @param onProgress 进度 0f..1f，会在后台线程回调；只统计真正解压的字节。
+     */
+    fun updateExtracted(epub: File, onProgress: (Float) -> Unit = {}): File {
+        val target = targetDirFor(epub)
+        if (!isComplete(target)) return ensureExtracted(epub, force = true, onProgress = onProgress)
+
+        // 新版里该有的相对路径（含图片加的 [IMAGE_SUFFIX]），用来找出该清掉的旧文件。
+        val keep = HashSet<String>()
+        // 要解压的条目：磁盘上没有，或大小和包里对不上。
+        val pending = ArrayList<Pair<ZipEntry, Dest>>()
+        var totalBytes = 0L
+
+        ZipFile(epub).use { zip ->
+            for (entry in entriesOf(zip)) {
+                val dest = destOf(entry, target) ?: continue
+                keep += dest.path
+                val cached = dest.file
+                if (cached.isFile && cached.length() == entry.size) continue
+                pending += entry to dest
+                totalBytes += entry.size.coerceAtLeast(0L)
+            }
+
+            var done = 0L
+            var lastReport = 0L
+            onProgress(0f)
+            for ((entry, dest) in pending) {
+                dest.file.parentFile?.mkdirs()
+                val next = writeEntry(zip, entry, dest.file, done, lastReport, totalBytes, onProgress)
+                done = next.first
+                lastReport = next.second
+                if (done > MAX_TOTAL_BYTES) {
+                    throw EpubParseException("更新后体积异常，已中止")
+                }
+            }
+        }
+
+        // 新版删掉的章节、换掉的图片不能留在缓存里：留着不但白占空间，也容易让人误以为还在。
+        pruneStale(target, keep)
+        markerOf(target).writeText("ok ${newGeneration()}\n")
+        writeStamp(epub)
+        onProgress(1f)
+        return target
+    }
+
+    /**
      * 把新解压结果换到目标位置。
      *
      * 已有旧目录时先把它改名成备份，而不是直接删 —— 万一新目录改名失败，
@@ -273,13 +330,8 @@ internal object EpubExtractor {
     }
 
     private fun extractInto(epub: File, target: File, onProgress: (Float) -> Unit) {
-        val root = target.canonicalFile
-        val rootPrefix = root.path + File.separator
-
         ZipFile(epub).use { zip ->
-            val all = ArrayList<ZipEntry>()
-            val iterator = zip.entries()
-            while (iterator.hasMoreElements()) all += iterator.nextElement()
+            val all = entriesOf(zip)
 
             // 总解压字节数取自 ZIP 目录，用来算百分比。
             val totalBytes = all.sumOf { if (it.isDirectory) 0L else it.size.coerceAtLeast(0L) }
@@ -289,41 +341,110 @@ internal object EpubExtractor {
             onProgress(0f)
 
             for (entry in all) {
-                if (entry.isDirectory) continue
-
-                val name = entry.name.replace('\\', '/').removePrefix("./")
-                if (name.isEmpty()) continue
-
-                // 图片加 [IMAGE_SUFFIX] 落盘（免得被系统媒体库收录），其余条目原样。
-                val out = File(target, outputNameOf(name))
-                // 防 Zip Slip：条目名里带 `../` 或绝对路径时会落到目录之外。
-                if (!out.canonicalPath.startsWith(rootPrefix)) {
-                    throw EpubParseException("EPUB 内含非法路径：${entry.name}")
-                }
-                // 防重名冲突：这几个文件由我们自己写，别被包里的同名条目覆盖 / 冒充。
-                if (out.name == MARKER || out.name == STAMP || out.name == EpubIndex.FILE_NAME) continue
-
-                out.parentFile?.mkdirs()
-                zip.getInputStream(entry).use { input ->
-                    out.outputStream().use { output ->
-                        val buffer = ByteArray(COPY_BUFFER)
-                        while (true) {
-                            val read = input.read(buffer)
-                            if (read <= 0) break
-                            output.write(buffer, 0, read)
-                            done += read
-                            if (done - lastReport >= PROGRESS_STEP_BYTES) {
-                                lastReport = done
-                                onProgress(fractionOf(done, totalBytes))
-                            }
-                        }
-                    }
-                }
+                val dest = destOf(entry, target) ?: continue
+                dest.file.parentFile?.mkdirs()
+                val next = writeEntry(
+                    zip, entry, dest.file, done, lastReport, totalBytes, onProgress,
+                )
+                done = next.first
+                lastReport = next.second
                 if (done > MAX_TOTAL_BYTES) {
                     throw EpubParseException("解压后体积异常，已中止")
                 }
             }
         }
+    }
+
+    /** ZIP 中央目录里的全部条目。 */
+    private fun entriesOf(zip: ZipFile): List<ZipEntry> {
+        val all = ArrayList<ZipEntry>()
+        val iterator = zip.entries()
+        while (iterator.hasMoreElements()) all += iterator.nextElement()
+        return all
+    }
+
+    /** 一个 zip 条目在解压目录里的落点。 */
+    private data class Dest(val path: String, val file: File)
+
+    /**
+     * 某个 zip 条目该落到哪儿；不该落盘的条目（目录、非法路径、本应用自己写的文件）返回 null。
+     *
+     * 解压和增量更新共用这一份判断，免得两条路对「哪个条目落在哪个文件」产生分歧。
+     */
+    private fun destOf(entry: ZipEntry, target: File): Dest? {
+        if (entry.isDirectory) return null
+
+        val name = entry.name.replace('\\', '/').removePrefix("./")
+        if (name.isEmpty()) return null
+
+        // 图片加 [IMAGE_SUFFIX] 落盘（免得被系统媒体库收录），其余条目原样。
+        val relative = outputNameOf(name)
+        val out = File(target, relative)
+        // 防 Zip Slip：条目名里带 `../` 或绝对路径时会落到目录之外。
+        if (!out.canonicalPath.startsWith(target.canonicalFile.path + File.separator)) {
+            throw EpubParseException("EPUB 内含非法路径：${entry.name}")
+        }
+        // 防重名冲突：这几个文件由我们自己写，别被包里的同名条目覆盖 / 冒充。
+        if (out.name == MARKER || out.name == STAMP || out.name == EpubIndex.FILE_NAME) return null
+
+        return Dest(relative, out)
+    }
+
+    /**
+     * 把一个 zip 条目写进 [out]。
+     *
+     * 返回「写入后累计的字节数 to 上次回调时的字节数」：进度不是每个字节都回调，
+     * 攒够 [PROGRESS_STEP_BYTES] 才报一次 —— 小条目很多时报得太密，
+     * 在主线程上重组进度条的次数比解压本身还费。
+     */
+    private fun writeEntry(
+        zip: ZipFile,
+        entry: ZipEntry,
+        out: File,
+        done: Long,
+        lastReport: Long,
+        totalBytes: Long,
+        onProgress: (Float) -> Unit,
+    ): Pair<Long, Long> {
+        var written = done
+        var reported = lastReport
+        zip.getInputStream(entry).use { input ->
+            out.outputStream().use { output ->
+                val buffer = ByteArray(COPY_BUFFER)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read <= 0) break
+                    output.write(buffer, 0, read)
+                    written += read
+                    if (written - reported >= PROGRESS_STEP_BYTES) {
+                        reported = written
+                        onProgress(fractionOf(written, totalBytes))
+                    }
+                }
+            }
+        }
+        return written to reported
+    }
+
+    /**
+     * 删掉缓存目录里新版已经没有的文件，收掉因此空出来的目录。
+     *
+     * [keep] 是新版该有的相对路径集合（`/` 分隔）。本应用自己写的那几个文件
+     * （完成标记、版本记录、解析索引、阅读进度）一律留下 —— 它们不在包里，
+     * 但删了就等于把用户读到哪儿、以及下次打开的秒开能力一起删了。
+     */
+    private fun pruneStale(target: File, keep: Set<String>) {
+        val own = setOf(MARKER, STAMP, EpubIndex.FILE_NAME, ReadHistory.FILE_NAME)
+        val stale = target.walkTopDown()
+            .filter { it.isFile && it.name !in own }
+            .filter { it.relativeTo(target).path.replace(File.separatorChar, '/') !in keep }
+            .toList()
+        for (file in stale) file.delete()
+
+        val emptyDirs = target.walkBottomUp()
+            .filter { it != target && it.isDirectory && it.listFiles()?.isEmpty() == true }
+            .toList()
+        for (dir in emptyDirs) dir.delete()
     }
 
     private fun fractionOf(done: Long, total: Long): Float =

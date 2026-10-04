@@ -10,6 +10,7 @@ import com.xialiangok.xlreader.data.sensor.SensorGesture
 import com.xialiangok.xlreader.data.sensor.SensorSettings
 import com.xialiangok.xlreader.presentation.screens.AboutScreen
 import com.xialiangok.xlreader.presentation.screens.ChapterListScreen
+import com.xialiangok.xlreader.presentation.screens.ChapterListScreenNumber
 import com.xialiangok.xlreader.presentation.screens.ChapterScreen
 import com.xialiangok.xlreader.presentation.screens.HomeScreen
 import com.xialiangok.xlreader.presentation.screens.LicensesScreen
@@ -74,7 +75,21 @@ fun PermissionScreenPreview() {
 @Composable
 fun ChapterListScreenPreview() {
     XlReaderTheme {
-        ChapterListScreen(book = previewBook, onOpenChapter = {}, onBack = {}, onBackToFileList = {})
+        ChapterListScreen(
+            book = previewBook,
+            onOpenChapter = {},
+            onBack = {},
+            onBackToFileList = {},
+            onOpenNumber = {},
+        )
+    }
+}
+
+@WearPreviewDevices
+@Composable
+fun ChapterListScreenNumberPreview() {
+    XlReaderTheme {
+        ChapterListScreenNumber(book = previewBook, onOpenChapter = {}, onBack = {})
     }
 }
 

@@ -590,6 +590,136 @@ class EpubParserTest {
         )
     }
 
+    // ---------- 增量更新缓存（原 epub 换版本后只补变了的条目） ----------
+
+    /** 原文件换版本后，只该把大小变了的条目重写一遍，没变的条目原样留着。 */
+    @Test
+    fun `incremental update only rewrites entries whose size changed`() {
+        val epub = newEpubFile()
+        val twoChapters = arrayOf(
+            "META-INF/container.xml" to container("OEBPS/content.opf"),
+            "OEBPS/content.opf" to opf(
+                title = "书", author = "人",
+                items = listOf("c1" to "c1.xhtml", "c2" to "c2.xhtml"),
+                spine = listOf("c1", "c2"),
+            ),
+            // 大小一样的纯 ASCII，方便下面按长度造一份「同长度但内容不同」的文件。
+            "OEBPS/c1.xhtml" to "<html><body><p>first</p></body></html>",
+            "OEBPS/c2.xhtml" to "<html><body><p>second</p></body></html>",
+        )
+        writeEpub(epub, *twoChapters)
+        val book = EpubParser.open(epub)
+
+        // 原文件更新：只有第一章变了（变长），第二章和 OPF 之外的东西都没动。
+        writeEpub(
+            epub,
+            "META-INF/container.xml" to container("OEBPS/content.opf"),
+            "OEBPS/content.opf" to opf(
+                title = "书", author = "人",
+                items = listOf("c1" to "c1.xhtml", "c2" to "c2.xhtml"),
+                spine = listOf("c1", "c2"),
+            ),
+            "OEBPS/c1.xhtml" to "<html><body><p>first chapter is longer now</p></body></html>",
+            "OEBPS/c2.xhtml" to "<html><body><p>second</p></body></html>",
+        )
+
+        // 把缓存里没变的第二章改成「同样长度、不同内容」：长度对得上，就说明它被跳过了。
+        val untouched = File(book.dir, "OEBPS/c2.xhtml")
+        val stale = "x".repeat(untouched.length().toInt())
+        untouched.writeText(stale)
+
+        EpubExtractor.updateExtracted(epub)
+
+        assertEquals("大小没变的条目不该被重写", stale, untouched.readText())
+        assertTrue(
+            "变了的章节应当被更新",
+            File(book.dir, "OEBPS/c1.xhtml").readText().contains("first chapter is longer now"),
+        )
+    }
+
+    /** 新版里删掉的章节不能留在缓存里，但阅读进度必须留着。 */
+    @Test
+    fun `incremental update deletes stale files but keeps the reading progress`() {
+        val epub = newEpubFile()
+        writeEpub(
+            epub,
+            "META-INF/container.xml" to container("OEBPS/content.opf"),
+            "OEBPS/content.opf" to opf(
+                title = "书", author = "人",
+                items = listOf("c1" to "c1.xhtml", "c2" to "c2.xhtml"),
+                spine = listOf("c1", "c2"),
+            ),
+            "OEBPS/c1.xhtml" to "<html><body><p>第一章。</p></body></html>",
+            "OEBPS/c2.xhtml" to "<html><body><p>第二章。</p></body></html>",
+        )
+        val book = EpubParser.open(epub)
+        ReadHistory.save(book.dir, ReadingPosition(chapter = 1, item = 4))
+
+        // 新版只剩一章
+        writeEpub(
+            epub,
+            "META-INF/container.xml" to container("OEBPS/content.opf"),
+            "OEBPS/content.opf" to opf(
+                title = "书", author = "人",
+                items = listOf("c1" to "c1.xhtml"),
+                spine = listOf("c1"),
+            ),
+            "OEBPS/c1.xhtml" to "<html><body><p>第一章。</p></body></html>",
+        )
+        EpubExtractor.updateExtracted(epub)
+
+        assertFalse("新版没有的章节文件应当被清掉", File(book.dir, "OEBPS/c2.xhtml").exists())
+        assertTrue(File(book.dir, "OEBPS/c1.xhtml").isFile)
+        assertEquals(ReadingPosition(1, 4), ReadHistory.load(book.dir))
+        assertEquals(1, EpubParser.open(epub).chapterCount)
+    }
+
+    /** 增量更新换了代次：上一版的索引必须作废，否则会拿旧章节表去读新内容。 */
+    @Test
+    fun `incremental update invalidates the stale index and picks up new content`() {
+        val epub = newEpubFile()
+        writeEpub(epub, *simpleEntries("<html><body><p>旧内容。</p></body></html>"))
+        val first = EpubParser.open(epub)
+        assertTrue("第一次打开应当写好索引", File(first.dir, EpubIndex.FILE_NAME).isFile)
+
+        writeEpub(epub, *simpleEntries("<html><body><p>更新后的新内容。</p></body></html>"))
+        EpubExtractor.updateExtracted(epub)
+
+        assertTrue("更新完就应当被认为与当前版本同步", EpubExtractor.isUpToDate(epub))
+        assertEquals(listOf("更新后的新内容。"), EpubParser.open(epub).texts(0))
+    }
+
+    /** 没有完整缓存可增量时，退化成整本解压，而不是报错。 */
+    @Test
+    fun `incremental update on a missing cache falls back to a full extraction`() {
+        val epub = simpleEpub("<html><body><p>甲。</p></body></html>")
+
+        val dir = EpubExtractor.updateExtracted(epub)
+
+        assertEquals(EpubExtractor.targetDirFor(epub).absolutePath, dir.absolutePath)
+        assertTrue(File(dir, "OEBPS/chap1.xhtml").isFile)
+    }
+
+    /** 增量更新也要报进度：从 0 开始、单调不减、最后到 1。 */
+    @Test
+    fun `incremental update reports progress that ends at one`() {
+        val epub = newEpubFile()
+        writeEpub(epub, *simpleEntries("<html><body><p>短。</p></body></html>"))
+        EpubParser.open(epub)
+        writeEpub(epub, *simpleEntries(longChapter()))
+
+        val seen = mutableListOf<Float>()
+        EpubExtractor.updateExtracted(epub) { seen += it }
+
+        assertTrue("至少要回调一次", seen.isNotEmpty())
+        assertEquals(0f, seen.first())
+        assertEquals(1f, seen.last())
+        assertTrue(
+            "进度不能倒退：$seen",
+            seen.zipWithNext().all { (before, after) -> after >= before },
+        )
+    }
+
     // ---------- 记住选择：不再每次打开都问 ----------
 
     /** 刚解压完就会记下版本，所以第二次打开直接读，不会再问。 */

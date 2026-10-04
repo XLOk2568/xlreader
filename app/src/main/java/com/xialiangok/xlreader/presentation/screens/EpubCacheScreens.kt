@@ -96,7 +96,7 @@ fun ExtractingScreen(
 /**
  * 「已有解压缓存」时的询问页。
  *
- * 说明清楚两件事：更新 = 重新解压（慢），不更新 = 直接用现有缓存；
+ * 说明清楚两件事：更新 = 只补解压变了的条目（快），不更新 = 直接用现有缓存；
  * 以及无论选哪个，阅读进度都不会丢。
  */
 @Composable
@@ -122,8 +122,8 @@ fun CachePromptScreen(
         item {
             Text(
                 text = "这本书之前已经解压过，可以直接打开。\n\n" +
-                    "「重新解压」会把整本书再解压一次，比较慢——原文件更新过、" +
-                    "或解压结果损坏时才需要。\n\n" +
+                    "「更新缓存」只把原文件里变了的章节和图片补解压进来，不会整本重来，" +
+                    "所以很快——原文件更新过时才需要。\n\n" +
                     "「直接阅读」会记住当前版本，以后不再询问；" +
                     "等原文件变了才会再问一次。\n\n" +
                     "不管选哪个，阅读进度都不会丢。",
@@ -140,7 +140,7 @@ fun CachePromptScreen(
         }
         item {
             Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
-                Text("重新解压（更新缓存）", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Text("更新缓存", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {

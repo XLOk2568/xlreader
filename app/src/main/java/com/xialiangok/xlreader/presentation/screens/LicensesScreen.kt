@@ -76,7 +76,7 @@ fun LicensesScreen(onBack: () -> Unit) {
             )
         }
 
-        item { ListSubHeader { Text("404", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
+        item { ListSubHeader { Text("", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             Text(
                 text = ""+"\n",

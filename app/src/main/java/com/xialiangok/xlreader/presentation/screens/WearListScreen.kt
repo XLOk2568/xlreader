@@ -2,7 +2,10 @@ package com.xialiangok.xlreader.presentation.screens
 
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
@@ -45,6 +48,9 @@ import androidx.wear.compose.material3.TimeText
  * @param listState 调用方如果需要在外面读滚动位置（例如记录阅读进度），
  *   可以自己创建状态传进来。
  * @param onTap     单击列表区域（不是点在具体按钮上）的回调。正文页用它切换快捷菜单。
+ * @param header    钉在列表上方、**不跟着滚动**的一块内容（传 null 就是没有）。
+ *   有它的时候整块内容先让进安全带，头在上、列表只拿剩下的高度；于是滚动只发生在
+ *   下面的列表里，头一直待在顶上。目录页用它放那根紫条。
  * @param content   列表内容。
  */
 @Composable
@@ -54,6 +60,7 @@ fun WearListScreen(
     startIndex: Int = 0,
     listState: LazyListState = rememberLazyListState(),
     onTap: (() -> Unit)? = null,
+    header: (@Composable () -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     AppScaffold {
@@ -80,15 +87,36 @@ fun WearListScreen(
                 Modifier
             }
 
-            LazyColumn(
-                state = listState,
-                contentPadding = contentPadding,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(tapModifier),
-                content = content,
-            )
+            if (header == null) {
+                LazyColumn(
+                    state = listState,
+                    contentPadding = contentPadding,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(tapModifier),
+                    content = content,
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(contentPadding),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    header()
+                    LazyColumn(
+                        state = listState,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .then(tapModifier),
+                        content = content,
+                    )
+                }
+            }
         }
     }
 }
+

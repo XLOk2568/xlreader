@@ -45,6 +45,7 @@ import com.xialiangok.xlreader.data.sensor.hasAccelerometer
 import com.xialiangok.xlreader.presentation.screens.AboutScreen
 import com.xialiangok.xlreader.presentation.screens.CachePromptScreen
 import com.xialiangok.xlreader.presentation.screens.ChapterListScreen
+import com.xialiangok.xlreader.presentation.screens.ChapterListScreenNumber
 import com.xialiangok.xlreader.presentation.screens.ChapterScreen
 import com.xialiangok.xlreader.presentation.screens.ExtractingScreen
 import com.xialiangok.xlreader.presentation.screens.HomeScreen
@@ -76,6 +77,9 @@ sealed interface Route {
 
     /** 打开一本书的过程与结果（解压中 / 询问是否更新缓存 / 章节目录）。 */
     data object Book : Route
+
+    /** 目录页顶部「数字跳转章节」按钮打开的数字跳章页；返回只是把这个附页关掉、回到目录。 */
+    data object CatalogNumber : Route
 
     data class Chapter(val index: Int) : Route
     data object Settings : Route
@@ -124,7 +128,11 @@ private enum class BookAction {
     /** 直接用现有缓存，不重新解压。 */
     KeepCache,
 
-    /** 重新解压（更新缓存）。 */
+    /**
+     * 更新缓存：只把变了 / 新增的条目补解压进现有目录，并清掉新版里已经没有的文件。
+     *
+     * 刻意不整本重新解压：原书更新一般只动了目录和少数章节，整本重来在手表上要等很久。
+     */
     RefreshCache,
 }
 
@@ -276,9 +284,10 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
     }
 
     // 手势只在三个内容页里有意义，别的页面（设置、关于、录制中…）一律不检测。
+    // 数字跳章页算在目录里：它是目录页自动弹出来的附页，在那儿手势不该突然失灵。
     val gesturePage = when (route) {
         Route.Browser -> GesturePage.FileList
-        Route.Book -> GesturePage.Catalog
+        Route.Book, Route.CatalogNumber -> GesturePage.Catalog
         is Route.Chapter -> GesturePage.Reader
         else -> null
     }
@@ -461,7 +470,9 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                     ExtractStatus.Complete -> if (upToDate) {
                         openForReading(file)
                     } else {
-                        // BookState.AskRefresh
+                        // 缓存还在，但原 epub 已经换过版本了：问一句要不要把缓存更新到新版。
+                        // （更新走增量解压，只补变了的条目，见 BookAction.RefreshCache。）
+                        bookState = BookState.AskRefresh
                     }
 
                     ExtractStatus.Foreign -> bookState =
@@ -477,7 +488,7 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
 
             BookAction.RefreshCache -> {
                 bookState = BookState.Extracting(0f)
-                val error = runExtraction(file, force = true) {
+                val error = runIncrementalUpdate(file) {
                     bookState = BookState.Extracting(it)
                 }
                 if (error != null) bookState = BookState.Failed(error) else openForReading(file)
@@ -579,6 +590,30 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                                 readerMenuVisible = false
                                 route = Route.Browser
                             },
+                            // 顶部固定的「数字跳转章节」按钮：打开数字跳章页（那一页的返回只是回到这一页）。
+                            onOpenNumber = { route = Route.CatalogNumber },
+                        )
+                    }
+                }
+
+                Route.CatalogNumber -> {
+                    val state = bookState
+                    if (state is BookState.Ready) {
+                        ChapterListScreenNumber(
+                            book = state.book,
+                            // 和目录页里点某一章是同一条路：清掉菜单状态、直接进正文。
+                            onOpenChapter = {
+                                readerMenuVisible = false
+                                route = Route.Chapter(it)
+                            },
+                            // 返回 = 关掉这个附页、回到目录。
+                            onBack = { route = Route.Book },
+                        )
+                    } else {
+                        NoticeScreen(
+                            title = "正在打开",
+                            message = "请稍候…",
+                            onAction = { route = Route.Browser },
                         )
                     }
                 }
@@ -761,6 +796,19 @@ private suspend fun runExtraction(
     null
 } catch (e: Exception) {
     e.message ?: "解压失败"
+}
+
+/** 增量更新缓存（只解压变了的条目）；成功返回 null，失败返回给用户看的消息。 */
+private suspend fun runIncrementalUpdate(
+    file: File,
+    onProgress: (Float) -> Unit,
+): String? = try {
+    withContext(Dispatchers.IO) {
+        EpubExtractor.updateExtracted(file, onProgress = onProgress)
+    }
+    null
+} catch (e: Exception) {
+    e.message ?: "更新缓存失败"
 }
 
 /** 解析元数据与章节结构（不读正文）。 */

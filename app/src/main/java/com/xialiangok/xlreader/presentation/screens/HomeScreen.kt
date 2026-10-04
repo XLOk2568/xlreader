@@ -154,6 +154,8 @@ fun HomeScreen(
                     text = currentDir.name.ifEmpty { "存储" },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
@@ -166,7 +168,7 @@ fun HomeScreen(
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyExtraSmall,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
