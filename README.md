@@ -4,6 +4,9 @@
 
 打开就是本地文件列表，点开一本书就能直接阅读，没有书城、没有同步、没有联网权限，也没有复杂动画。
 
+初次使用请授权文件管理权：
+`adb shell appops set --uid com.dertefter.wearfiles MANAGE_EXTERNAL_STORAGE allow`
+
 除了基本阅读功能外，XLreader 还尝试探索一种更适合手表的交互方式：
 
 **体感手势阅读。**
