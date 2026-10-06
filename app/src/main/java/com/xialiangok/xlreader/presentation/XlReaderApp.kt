@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -30,9 +31,12 @@ import com.xialiangok.xlreader.data.epub.EpubParser
 import com.xialiangok.xlreader.data.epub.ExtractStatus
 import com.xialiangok.xlreader.data.epub.ReadHistory
 import com.xialiangok.xlreader.data.epub.ReadingPosition
+import com.xialiangok.xlreader.data.file.FileEntry
 import com.xialiangok.xlreader.data.file.defaultRootPath
 import com.xialiangok.xlreader.data.file.appDataDir
+import com.xialiangok.xlreader.data.file.findLatestMarkerTarget
 import com.xialiangok.xlreader.data.file.hasAllFilesAccess
+import com.xialiangok.xlreader.data.file.listDirectory
 import com.xialiangok.xlreader.data.file.parentWithinRoot
 import com.xialiangok.xlreader.data.file.writeLatestMarker
 import com.xialiangok.xlreader.data.sensor.GestureAction
@@ -172,22 +176,65 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
         )
     }
 
-    /** 换目录：内存里换掉的同时立刻记盘，切到别的页面或直接退出应用都不会丢这个位置。 */
-    fun setBrowserDir(path: String) {
-        browserDir = path
-        store.saveBrowserDir(path)
-    }
-
     /**
      * 上次打开的那本 epub 的路径，启动时读一次就够。
      *
      * 它和 [browserDir] 是两码事：目录照旧由上次浏览的位置决定，这份路径只用来给文件列表
-     * 做启动定位（和书并排的 `xlrLatest.txt` 万一被删了，退回定位到这本书上）。
+     * 做定位（和书并排的 `xlrLatest.txt` 万一被删了，退回定位到这本书上）。
      */
     val lastBookPath = remember { store.readLastBookPath() }
 
-    /** 本次启动后是否还没做过「最近打开」的定位；文件列表第一次进来时用一次，之后置 false。 */
-    var locateOnLaunch by remember { mutableStateOf(true) }
+    // 文件列表要显示的内容（条目 + 「最近打开」那一项）放在根组件，不放在页面里：
+    // 进阅读页 / 设置页 / 关于页时文件列表会离开组合，状态留在页面里的话回来时要重新读一遍，
+    // 中间那一段只有表头的空列表会把 LazyList 的滚动位置夹回顶部（用户口径：从设置 / 关于
+    // 回来要保持原来的滚动位置）。放在这里就只跟目录走 —— 只有真的换目录才重新读。
+    var browserEntries by remember { mutableStateOf<List<FileEntry>>(emptyList()) }
+    var browserLoading by remember { mutableStateOf(true) }
+    var browserLocatedPath by remember { mutableStateOf<String?>(null) }
+
+    // 文件列表的滚动状态同样提上来：页面自己记的话，一离开组合就没了。
+    // 换目录时的「回到顶部」因此也改由 setBrowserDir 自己做（页面那边不再按目录重置）。
+    val browserListState = rememberLazyListState()
+    val browserScope = rememberCoroutineScope()
+
+    /** 换目录：内存里换掉的同时立刻记盘，切到别的页面或直接退出应用都不会丢这个位置。 */
+    fun setBrowserDir(path: String) {
+        browserDir = path
+        store.saveBrowserDir(path)
+        // 换目录 ＝ 换一批条目：旧内容立刻清掉（不能多显示一帧，更不能点开旧目录里的书），
+        // 滚动位置回到顶部。这两件事原来都由文件列表自己做，滚动状态提上来之后得自己做，
+        // 否则从设置 / 关于回来（resetKey 没变、只是页面重新组合）也会被拉回顶部。
+        browserEntries = emptyList()
+        browserLocatedPath = null
+        browserLoading = true
+        browserScope.launch { runCatching { browserListState.scrollToItem(0) } }
+    }
+
+    // 列目录 + 认标记都要走 IO 线程。键是目录：只有真的换目录才重新读一次。
+    LaunchedEffect(browserDir) {
+        val loaded = withContext(Dispatchers.IO) {
+            val listed = listDirectory(File(browserDir))
+            // 优先信 epub 旁边那份 xlrLatest.txt；标记不在、或它指的书已经不在这个目录里
+            // （被删 / 改名 / 挪走），再退回上次打开路径 —— 但同样必须能在列表里找到才作数。
+            val marked = findLatestMarkerTarget(File(browserDir), listed)?.path
+            val last = lastBookPath?.takeIf { path -> listed.any { it.path == path } }
+            listed to (marked ?: last)
+        }
+        browserEntries = loaded.first
+        browserLocatedPath = loaded.second
+        browserLoading = false
+    }
+
+    /**
+     * 这一次进文件列表要不要自动定位到「最近打开」的那本书（滚到它上面并把它染紫）。
+     *
+     * 启动后第一次进文件列表要定位；之后**打开子文件夹**、**从阅读页返回文件列表**
+     * 也重新置位 —— 打开的目录（或刚读完的那本书所在的目录）里有有效的 `xlrLatest.txt`
+     * 时，就滚到那本书上，而不是只把名字染成紫色。
+     * 点「上一级」往上走、从设置页 / 关于页回来时都**不**重新置位：
+     * 前者不该被跳走，后者要的是「保持原来的滚动位置」。
+     */
+    var locateOnEntry by remember { mutableStateOf(true) }
 
     var pendingPath by remember { mutableStateOf<String?>(null) }
     var bookState by remember { mutableStateOf<BookState>(BookState.Loading) }
@@ -283,18 +330,24 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
         }
     }
 
-    // 手势只在三个内容页里有意义，别的页面（设置、关于、录制中…）一律不检测。
+    // 手势只在内容页里有意义，别的页面（设置、关于、录制中…）一律不检测。
     // 数字跳章页算在目录里：它是目录页自动弹出来的附页，在那儿手势不该突然失灵。
+    // 阅读菜单开着时换成「正文阅读(菜单)」那一页：菜单铺满整屏，手势该落在菜单上；
+    // 这一页没勾上就不跑检测任务，菜单只靠手指操作。
     val gesturePage = when (route) {
         Route.Browser -> GesturePage.FileList
         Route.Book, Route.CatalogNumber -> GesturePage.Catalog
-        is Route.Chapter -> GesturePage.Reader
+        is Route.Chapter -> if (readerMenuVisible) GesturePage.ReaderMenu else GesturePage.Reader
         else -> null
     }
     // 当前页面此刻要检测的手势：总开关、启用页面、单个手势开关三个条件都满足才留下来。
     val activeGestures = remember(sensorSettings, gesturePage) {
         gesturePage?.let { sensorSettings.activeOn(it) } ?: emptyList()
     }
+    // 阅读菜单里要不要跑光标导航：要有「正文阅读(菜单)」这一页、而且它至少剩一条启用的手势。
+    // 为假时菜单既不显示光标、也不接管体感手势（没有检测任务可接管）。
+    val menuGestureEnabled =
+        gesturePage == GesturePage.ReaderMenu && activeGestures.isNotEmpty()
 
     val detector = remember(context) { TiltGestureDetector(context) }
     val gestureHandler = rememberUpdatedState<(SensorGesture) -> Unit> { performGesture(it) }
@@ -325,11 +378,18 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
 
     // 需要检测就注册传感器，不需要就立刻注销：这就是「非启用任何手势的页面立刻停止检测任务」，
     // 也是总开关关掉、应用退到后台时的行为。
-    // 间隔一变也要重新注册（采样率是注册时定下的）。
-    DisposableEffect(activeGestures, sensorSettings.intervalMs, resumed) {
+    // 间隔、休息间隔一变也要重新注册（采样率是注册时定下的，休息间隔要跟着这一轮走）；
+    // gesturePage 也进 key：休息间隔设成 -1 时检测会自己停下，换页 / 换回本页要能重新跑起来
+    // （两个页面的手势列表可能内容相同，只靠 activeGestures 认不出「换了页」）。
+    DisposableEffect(activeGestures, sensorSettings.intervalMs, sensorSettings.restMs, gesturePage, resumed) {
         if (resumed && activeGestures.isNotEmpty()) {
             // gestureMode 为 null 表示「只跑第一个命中的」；多手势那两种方式由设置页决定。
-            detector.start(activeGestures, sensorSettings.intervalMs, sensorSettings.gestureMode)
+            detector.start(
+                activeGestures,
+                sensorSettings.intervalMs,
+                sensorSettings.restMs,
+                sensorSettings.gestureMode,
+            )
         } else {
             detector.stop()
         }
@@ -406,8 +466,13 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
         saveProgressOnLeave(book, chapterIndex)
         // 离开正文页 = 离开这本书：把「最近打开」的标记写到它旁边。
         rememberLatestBook(book.sourceFile)
+        // 刚离开的这本就是「最近打开」：标记已经写好了，文件列表直接照它定位 / 着色，
+        // 于是返回列表时会滚到这本书上（用户口径），也不用再去读一遍目录内容。
+        browserLocatedPath = book.sourceFile.absolutePath
         // 已经离开正文页了，菜单状态留着会让下一本书一进来就弹菜单。
         readerMenuVisible = false
+        // 刚从这本书里出来：文件列表要滚到它旁边那份标记上，而不是停在原处。
+        locateOnEntry = true
         route = Route.Browser
     }
 
@@ -514,10 +579,17 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
 
                 Route.Browser -> HomeScreen(
                     dirPath = browserDir,
-                    lastBookPath = lastBookPath,
-                    autoLocate = locateOnLaunch,
-                    onAutoLocated = { locateOnLaunch = false },
-                    onOpenDirectory = { setBrowserDir(it) },
+                    entries = browserEntries,
+                    loading = browserLoading,
+                    locatedPath = browserLocatedPath,
+                    listState = browserListState,
+                    autoLocate = locateOnEntry,
+                    onAutoLocated = { locateOnEntry = false },
+                    onOpenDirectory = { path ->
+                        setBrowserDir(path)
+                        // 打开一个子文件夹 ＝ 进一个新的文件列表：里面有标记就滚到那本书上。
+                        locateOnEntry = true
+                    },
                     onOpenBook = { path ->
                         pendingPath = path
                         // 换书：上一本书「打开目录时在第几章」不能带到这一本上来。
@@ -588,6 +660,9 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                                 // 从目录页直接离开这本书也算「最近打开」，和正文页那条路一致。
                                 rememberLatestBook(state.book.sourceFile)
                                 readerMenuVisible = false
+                                // 和正文页的「返回文件列表」一样：回到列表要滚到这本书的标记上。
+                                browserLocatedPath = state.book.sourceFile.absolutePath
+                                locateOnEntry = true
                                 route = Route.Browser
                             },
                             // 顶部固定的「数字跳转章节」按钮：打开数字跳章页（那一页的返回只是回到这一页）。
@@ -635,6 +710,7 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                             onOpenSettings = { openSettingsFromReader(state.book, current.index) },
                             menuVisible = readerMenuVisible,
                             onMenuVisibleChange = { readerMenuVisible = it },
+                            menuGestureEnabled = menuGestureEnabled,
                         )
                     } else {
                         NoticeScreen(

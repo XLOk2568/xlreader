@@ -38,6 +38,10 @@ fun hasAccelerometer(context: Context): Boolean {
  * 每个检测周期都会执行一次 —— 所以摆着不动时，翻页类手势会连续滚、单击类会反复开合。
  * 命中多条时按 [MultiGestureMode] 执行：默认只认列表里最靠前的那条；
  * 打开「允许多个手势」后，可以一拍全执行，也可以按顺序逐条执行（相邻两条隔 20ms）。
+ *
+ * 触发后的休息由设置里的休息间隔决定（**仅限本轮**，休息完继续按检测间隔走）：
+ * 休息期直接注销监听、到点自动接回来；设置成 -1 时触发一次就彻底停下。
+ * 见 [rest]。
  */
 class TiltGestureDetector(context: Context) : SensorEventListener {
 
@@ -52,11 +56,22 @@ class TiltGestureDetector(context: Context) : SensorEventListener {
     private var gestures: List<SensorGesture> = emptyList()
     private var intervalMs = SensorSettings.DEFAULT_INTERVAL_MS
 
+    /** 触发后的休息间隔；0 = 不休息，[SensorSettings.REST_STOP_MS] = 触发一次后停止后续检测。 */
+    private var restMs = SensorSettings.DEFAULT_REST_MS
+
     /** 命中多条时的执行方式；null = 只跑第一个命中的。 */
     private var mode: MultiGestureMode? = null
 
     /** 「按顺序执行」时用来把同一拍里的第 2、3… 条手势隔 20ms 依次投递出去。 */
     private val handler = Handler(Looper.getMainLooper())
+
+    /** 还在检测吗。休息期到点后要靠它判断该不该自动重新注册；[stop] 会把它关掉。 */
+    private var active = false
+
+    /** 休息结束后的自动重新注册（休息期注销监听，到点再由它接回来）。 */
+    private val resume = Runnable {
+        if (active && gestures.isNotEmpty()) register()
+    }
 
     /** 上一次真正做判定的时刻（[SystemClock.elapsedRealtime] 毫秒）；负数表示还没采过。 */
     private var lastSampleMs = -1L
@@ -67,26 +82,66 @@ class TiltGestureDetector(context: Context) : SensorEventListener {
     /** 手表上有没有加速度计。没有就不必折腾了。 */
     val available: Boolean get() = accelerometer != null
 
-    /** 需要检测的手势列表（已经过滤掉被关掉的）、采样间隔，以及多手势的执行方式。 */
-    fun start(gestures: List<SensorGesture>, intervalMs: Int, mode: MultiGestureMode?) {
+    /**
+     * 注册监听。
+     *
+     * 第三个参数是微秒，只是**建议值**（[intervalMs] 为 0 就是「不节流」，框架按最快给），
+     * 真正的节流在 [onSensorChanged] 里。
+     */
+    private fun register() {
         val sensor = accelerometer ?: return
+        sensorManager.registerListener(this, sensor, intervalMs * 1000)
+    }
+
+    /** 需要检测的手势列表（已经过滤掉被关掉的）、采样间隔、休息间隔，以及多手势的执行方式。 */
+    fun start(
+        gestures: List<SensorGesture>,
+        intervalMs: Int,
+        restMs: Int,
+        mode: MultiGestureMode?,
+    ) {
+        if (accelerometer == null) return
         this.gestures = gestures
         this.intervalMs = intervalMs
+        this.restMs = restMs
         this.mode = mode
         primed = false
-        // 上一轮「按顺序执行」还没投递完的，重新开始前一律丢掉。
+        active = true
+        // 上一轮「按顺序执行」还没投递完的、以及休息期的自动重注册，重新开始前一律丢掉。
         handler.removeCallbacksAndMessages(null)
         lastSampleMs = -1L
-        // registerListener 的第三个参数是微秒，只是建议值，真正的节流在 onSensorChanged 里。
-        sensorManager.registerListener(this, sensor, intervalMs * 1000)
+        register()
     }
 
     /** 注销监听。重复调用是安全的，切页面时自己不必判断有没有在跑。 */
     fun stop() {
+        active = false
         sensorManager.unregisterListener(this)
         // 排队中的后续手势也要清掉：已经离开这一页了，不该隔 20ms 再补一刀。
         handler.removeCallbacksAndMessages(null)
         gestures = emptyList()
+    }
+
+    /**
+     * 触发后的休息（用户口径：**仅限本轮**）。
+     *
+     * 正数：注销监听、歇够 [restMs] 再由 [resume] 接回来 —— 休息期一个采样点都不收，最省电；
+     * [SensorSettings.REST_STOP_MS]：彻底停下，直到换页 / 改动设置重新 [start]。
+     *
+     * 排队中的后续手势（「按顺序执行」）不清：它们属于刚刚这一轮，本来就该发完。
+     */
+    private fun rest() {
+        // 0 = 不休息：什么都不做，监听保持注册、照常按检测间隔走。
+        if (restMs == SensorSettings.MIN_REST_MS) return
+
+        sensorManager.unregisterListener(this)
+        lastSampleMs = -1L
+        handler.removeCallbacks(resume)
+        if (restMs == SensorSettings.REST_STOP_MS) {
+            active = false
+        } else if (restMs > 0) {
+            handler.postDelayed(resume, restMs.toLong())
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -132,6 +187,9 @@ class TiltGestureDetector(context: Context) : SensorEventListener {
                 }
             }
         }
+
+        // 这一轮真的触发了手势，才进休息（没触发就继续按设置的检测间隔走）。
+        if (matched.isNotEmpty()) rest()
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit

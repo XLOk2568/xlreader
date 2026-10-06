@@ -3,15 +3,12 @@ package com.xialiangok.xlreader.presentation.screens
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -26,16 +23,12 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import com.xialiangok.xlreader.data.file.FileEntry
 import com.xialiangok.xlreader.data.file.displayPath
-import com.xialiangok.xlreader.data.file.findLatestMarkerTarget
 import com.xialiangok.xlreader.data.file.formatSize
-import com.xialiangok.xlreader.data.file.listDirectory
 import com.xialiangok.xlreader.data.file.parentWithinRoot
 import com.xialiangok.xlreader.presentation.BindGestureActions
 import com.xialiangok.xlreader.presentation.centeredItemKey
 import com.xialiangok.xlreader.presentation.scrollByItems
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
 
@@ -43,7 +36,7 @@ import com.xialiangok.xlreader.presentation.theme.readerButtonColors
  * 「最近打开」那本书的名称颜色：rgb(204, 91, 246)。
  *
  * 整个界面都是纯黑 + 灰阶，只有它（和文件夹的 [FolderNameColor]）带颜色 ——
- * 打开应用时列表会自动滚到它上面，有颜色才能一眼从一列书名里认出「上次读的就是这本」。
+ * 进这个目录时列表会自动滚到它上面，有颜色才能一眼从一列书名里认出「上次读的就是这本」。
  * 标记文件本身不上色、也不进列表。
  */
 private val LatestMarkerColor = Color(0xFFCC5BF6)
@@ -61,13 +54,19 @@ private const val ENTRY_HEADER_ITEMS = 3
  * 点目录进去，点 epub 直接开读。
  *
  * 目录里若有和书并排的 `xlrLatest.txt`（里面记着上次打开的那本 epub 的名字），
- * 它指向的那本 epub 会被 [LatestMarkerColor] 标出来，启动时列表也自动滚到它上面；
+ * 它指向的那本 epub 会被 [LatestMarkerColor] 标出来，进来这个目录时列表也自动滚到它上面；
  * 标记文件自己不作为条目出现。
  *
  * @param dirPath        当前所在目录的绝对路径。
- * @param lastBookPath   上次打开的那本 epub 的绝对路径；只在标记不可用时兜底定位，
- *                       和「上次停在哪个目录」是两回事，不会改变进来的目录。
- * @param autoLocate     本次启动后第一次进文件列表：自动滚到「最近打开」那本书上。
+ * @param entries        这个目录里读出来的条目（子目录 + epub）；空表示还没读出来。
+ * @param loading        目录内容是不是正在读。
+ * @param locatedPath    「最近打开」那本书的绝对路径（找不到则为 null）：它就是要定位、要标色的那一项。
+ *   目录内容与滚动状态都由根组件持有 —— 从阅读页 / 设置页 / 关于页回来时这一页会重新组合，
+ *   状态留在页面里的话，内容会重新读（列表先缩成空的）、滚动位置被夹回顶部。
+ * @param listState      文件列表的滚动状态，同样由根组件持有，理由同上。
+ * @param autoLocate     本次进入这个目录要不要自动滚到「最近打开」那本书上
+ *                       （启动后第一次进来、打开子文件夹、从阅读页返回时为 true；
+ *                       打开设置 / 关于再回来时为 false，那时要保持原来的滚动位置）。
  * @param onAutoLocated  这次定位已经处理完（成功与否都算），调用方据此不再重复定位。
  * @param onOpenDirectory 进入子目录。
  * @param onOpenBook     打开一本电子书（绝对路径）。
@@ -77,7 +76,10 @@ private const val ENTRY_HEADER_ITEMS = 3
 @Composable
 fun HomeScreen(
     dirPath: String,
-    lastBookPath: String?,
+    entries: List<FileEntry>,
+    loading: Boolean,
+    locatedPath: String?,
+    listState: LazyListState,
     autoLocate: Boolean,
     onAutoLocated: () -> Unit,
     onOpenDirectory: (String) -> Unit,
@@ -87,37 +89,15 @@ fun HomeScreen(
     onOpenAbout: () -> Unit,
     onExitApp: () -> Unit,
 ) {
-    var entries by remember(dirPath) { mutableStateOf<List<FileEntry>>(emptyList()) }
-    var loading by remember(dirPath) { mutableStateOf(true) }
-    // 目录里「上次打开的那本书」；它就是要定位、要标色的那一项（找不到则为 null）。
-    var locatedPath by remember(dirPath) { mutableStateOf<String?>(null) }
-
-    // 列目录 + 认标记都要走 IO 线程
-    LaunchedEffect(dirPath) {
-        loading = true
-        val loaded = withContext(Dispatchers.IO) {
-            val listed = listDirectory(File(dirPath))
-            // 优先信 epub 旁边那份 xlrLatest.txt；标记不在、或它指的书已经不在这个目录里
-            // （被删 / 改名 / 挪走），再退回上次打开路径 —— 但同样必须能在列表里找到才作数。
-            val marked = findLatestMarkerTarget(File(dirPath), listed)?.path
-            val last = lastBookPath?.takeIf { path -> listed.any { it.path == path } }
-            listed to (marked ?: last)
-        }
-        entries = loaded.first
-        locatedPath = loaded.second
-        loading = false
-    }
-
     val currentDir = remember(dirPath) { File(dirPath) }
     val parent = remember(dirPath) { parentWithinRoot(currentDir) }
     val folderCount = entries.count { it.isDirectory }
     val bookCount = entries.size - folderCount
 
-    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    // 打开应用后第一次进文件列表：自动滚到「最近打开」的那本 epub 上。
-    // 标记与上次打开路径都落在这个目录里才滚，否则保持原位。
+    // 要定位就滚到「最近打开」的那本 epub 上（启动后第一次进来、打开子文件夹、从阅读页回来）；
+    // 目录内容还没读出来（loading）或者上层说不用定位（从设置 / 关于回来）时保持原位不动。
     // 注意这里**只动滚动位置、不动目录**：进来停在哪个目录仍然由上次浏览的位置决定。
     LaunchedEffect(autoLocate, loading, entries, locatedPath) {
         if (!autoLocate || loading) return@LaunchedEffect
@@ -127,7 +107,7 @@ fun HomeScreen(
             val offset = ENTRY_HEADER_ITEMS + if (parent != null) 1 else 0
             runCatching { listState.scrollToItem(offset + index) }
         }
-        // 只定位这一次：读完一本书回到列表时不该再自动跳走。
+        // 定位只做这一次，做完就让上层把标志清掉。
         onAutoLocated()
     }
 
@@ -147,7 +127,12 @@ fun HomeScreen(
         onScrollBy = { delta -> scope.launch { scrollByItems(listState, delta) } },
     )
 
-    WearListScreen(resetKey = dirPath, listState = listState) {
+    WearListScreen(
+        // resetKey 传 null：滚动状态由根组件持有，进出组合都不许重置 ——
+        // 换目录时的「回到顶部」由根组件的 setBrowserDir 自己做。
+        resetKey = null,
+        listState = listState,
+    ) {
         item {
             ListHeader {
                 Text(

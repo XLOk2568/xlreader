@@ -48,6 +48,7 @@ import com.xialiangok.xlreader.data.sensor.formatAngle
 import com.xialiangok.xlreader.data.sensor.stepAngleMax
 import com.xialiangok.xlreader.data.sensor.stepAngleMin
 import com.xialiangok.xlreader.data.sensor.stepIntervalMs
+import com.xialiangok.xlreader.data.sensor.stepRestMs
 import com.xialiangok.xlreader.data.sensor.stepSpeed
 import com.xialiangok.xlreader.presentation.theme.ReaderSurface
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
@@ -129,9 +130,12 @@ fun SensorSettingsScreen(
         }
 
         item {
-            StepRow(
+            // 间隔可以直接输入整数：± 一次只走 10ms，从 0 按到 60000 要按很久（用户口径）。
+            NumberStepRow(
                 label = "检测间隔",
-                value = "${settings.intervalMs} ms",
+                value = settings.intervalMs,
+                inputRange = SensorSettings.MIN_INTERVAL_MS..SensorSettings.MAX_INTERVAL_MS,
+                onValueChange = { onChange(settings.copy(intervalMs = it)) },
                 onMinus = {
                     onChange(
                         settings.copy(
@@ -154,6 +158,32 @@ fun SensorSettingsScreen(
                 },
             )
         }
+        item { HintText(INTERVAL_HINT) }
+
+        item {
+            // 触发后休息间隔：0 ~ 5 分钟按 10ms 走，到顶再按 ＋ 变成 -1（触发一次后停止后续检测）。
+            NumberStepRow(
+                label = "触发后休息间隔",
+                value = settings.restMs,
+                inputRange = SensorSettings.MIN_REST_MS..SensorSettings.MAX_REST_MS,
+                onValueChange = { onChange(settings.copy(restMs = it)) },
+                onMinus = {
+                    onChange(
+                        settings.copy(
+                            restMs = stepRestMs(settings.restMs, -SensorSettings.REST_STEP_MS),
+                        ),
+                    )
+                },
+                onPlus = {
+                    onChange(
+                        settings.copy(
+                            restMs = stepRestMs(settings.restMs, SensorSettings.REST_STEP_MS),
+                        ),
+                    )
+                },
+            )
+        }
+        item { HintText(REST_HINT) }
 
         item {
             Button(
@@ -279,7 +309,9 @@ fun SensorPagesScreen(
         item {
             Text(
                 text = "只有勾上的页面才会开启手势检测任务；进别的页面会立刻停掉，" +
-                    "一个采样点都不收。",
+                    "一个采样点都不收。\n\n" +
+                    "「正文阅读(菜单)」另外管着阅读菜单里的体感选中光标：不勾它，" +
+                    "菜单开着就只有手指能操作，光标和手势都没有。",
                 style = MaterialTheme.typography.bodyExtraSmall,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
@@ -753,6 +785,28 @@ fun SensorPermissionScreen(
 
 /** 手改角度一次走 1°；往下走的那一侧用它的相反数。 */
 private const val ANGLE_STEP = SensorGesture.ANGLE_STEP_DEG
+
+/** 设置项下面那行小字说明：居中、次要色，和别处的提示写法一致。 */
+@Composable
+private fun HintText(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyExtraSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+private const val INTERVAL_HINT =
+    "检测间隔（毫秒）：没触发手势时就一直按这个间隔走。" +
+        "0 表示不节流（每个传感器回调都判定），上限 60000。"
+
+private const val REST_HINT =
+    "触发后休息间隔（毫秒）：只影响本轮 —— 这一轮触发了手势就先不采样，" +
+        "歇够这段时间再按检测间隔继续；0 表示不休息。" +
+        "到 5 分钟（300000）再按 ＋ 就是 -1，即触发一次后停止后续检测" +
+        "（离开 / 重进页面或改动设置后恢复）。"
 
 private const val RECORD_HINT =
     "提示：新增手势时先倒计时 3 秒，再在 10 秒内把表摆成要用的姿势；" +

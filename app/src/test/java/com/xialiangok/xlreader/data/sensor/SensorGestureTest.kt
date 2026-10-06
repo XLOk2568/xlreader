@@ -116,12 +116,36 @@ class SensorGestureTest {
         assertEquals(7, stepSpeed(6, +1))
     }
 
-    /** 检测间隔夹在 50..2000 毫秒，一步 10 毫秒。 */
+    /** 检测间隔夹在 0..60000 毫秒，一步 10 毫秒。 */
     @Test
     fun `interval steps stay in range`() {
         assertEquals(SensorSettings.MIN_INTERVAL_MS, stepIntervalMs(SensorSettings.MIN_INTERVAL_MS, -10))
         assertEquals(SensorSettings.MAX_INTERVAL_MS, stepIntervalMs(SensorSettings.MAX_INTERVAL_MS, +10))
         assertEquals(210, stepIntervalMs(200, +10))
+    }
+
+    /** 休息间隔 0..5 分钟按 10ms 走，到顶再＋变 -1（停止后续检测），-1 再＋回到 0。 */
+    @Test
+    fun `rest steps run up to five minutes then the stop value`() {
+        assertEquals(10, stepRestMs(0, +10))
+        assertEquals(0, stepRestMs(0, -10))
+        assertEquals(
+            SensorSettings.REST_STOP_MS,
+            stepRestMs(SensorSettings.MAX_REST_MS, +10),
+        )
+        assertEquals(0, stepRestMs(SensorSettings.REST_STOP_MS, +10))
+        assertEquals(
+            SensorSettings.MAX_REST_MS,
+            stepRestMs(SensorSettings.REST_STOP_MS, -10),
+        )
+    }
+
+    /** 间隔填 0 就是「不节流」：每一拍都判定（不是「永远不采」）。 */
+    @Test
+    fun `zero interval samples every event`() {
+        assertEquals(100L, dueSampleTimeMs(100L, -1L, 0))
+        assertEquals(150L, dueSampleTimeMs(150L, 100L, 0))
+        assertEquals(100L, dueSampleTimeMs(100L, 100L, 0))
     }
 
     /** 总开关关掉时，任何页面都不检测。 */
@@ -165,6 +189,8 @@ class SensorGestureTest {
 
         assertEquals(GesturePage.entries.toSet(), settings.pages)
         assertEquals(SensorSettings.DEFAULT_INTERVAL_MS, settings.intervalMs)
+        // 默认不休息：触发后照常按检测间隔走（一直以来的行为）。
+        assertEquals(SensorSettings.DEFAULT_REST_MS, settings.restMs)
         assertEquals(GestureAction.Tap, SensorGesture(id = "x", name = "x").action)
         assertEquals(SensorGesture.DEFAULT_SPEED, SensorGesture(id = "x", name = "x").speed)
         assertTrue(GestureAction.ScrollDown.hasSpeed)

@@ -76,10 +76,10 @@ fun LicensesScreen(onBack: () -> Unit) {
             )
         }
 
-        item { ListSubHeader { Text("", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
+        item { ListSubHeader { Text("感谢测试", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             Text(
-                text = ""+"\n",
+                text = "NCSmaoliang"+"\nhttps://github.com/NCSmaoliang",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

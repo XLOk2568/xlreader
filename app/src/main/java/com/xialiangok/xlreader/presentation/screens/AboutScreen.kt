@@ -48,7 +48,7 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "版本 1.0.2611.13 · Wear OS\n最低支持 Android 11（API 30)",
+                text = "版本 1.0.2611.19 · Wear OS\n最低支持 Android 11（API 30)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -76,15 +76,9 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "1.增加保持上次打开Path功能\n"+
-                        "2.修改目录逻辑\n"+
-                        "3.修改部分ui\n"+
-                        "4.修复手势和优化手势体感\n"+
-                        "5.优化了导出导入设置的复制功能\n"+
-                        "6.优化了文件目录功能(新增了文件夹颜色和定位上次阅读文件)\n"+
-                        "7.解压图像资源改成.xlr后缀，以免系统收录\n"+
-                        "8.对于增量更新，进行了优化\n"+
-                        "9.增新目录支持手动输入数字跳转",
+                text = "1.优化体感指示，在阅读菜单页面\n"+
+                        "2.优化了部分页面的返回体验\n"+
+                        "相较于1.0.2611.13版本",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

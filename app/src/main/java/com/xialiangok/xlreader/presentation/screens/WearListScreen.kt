@@ -44,6 +44,8 @@ import androidx.wear.compose.material3.TimeText
  * @param timeText  屏幕顶部的时间文本，默认使用系统时间。
  * @param resetKey  变化时把列表滚到 [startIndex]。切换目录、翻章都必须重置，
  *   否则列表状态会被复用，用户一进新内容就停在中间。
+ *   传 **null 表示这一页自己管滚动位置**：进出组合时都不动它（文件列表要靠这一点
+ *   保住从阅读页 / 设置页 / 关于页回来时的原位置），需要重置时由调用方自己滚。
  * @param startIndex [resetKey] 变化时滚动到的位置。正文页用它恢复上次读到的段落。
  * @param listState 调用方如果需要在外面读滚动位置（例如记录阅读进度），
  *   可以自己创建状态传进来。
@@ -64,9 +66,13 @@ fun WearListScreen(
     content: LazyListScope.() -> Unit,
 ) {
     AppScaffold {
-        LaunchedEffect(resetKey) {
-            // 下标越界时由 LazyList 自己钳制；恢复进度失败不该让页面崩掉。
-            runCatching { listState.scrollToItem(startIndex.coerceAtLeast(0)) }
+        // resetKey 为 null 时**连这个 effect 都不建**：LaunchedEffect 每次进入组合都会跑一遍，
+        // 页面重新组合（比如从设置页回到文件列表）时 resetKey 没变也会把位置拉回 [startIndex]。
+        if (resetKey != null) {
+            LaunchedEffect(resetKey) {
+                // 下标越界时由 LazyList 自己钳制；恢复进度失败不该让页面崩掉。
+                runCatching { listState.scrollToItem(startIndex.coerceAtLeast(0)) }
+            }
         }
         // 注意：这里**没有传 scrollState**，走的是 [ScreenScaffold] 那个不带滚动状态的
         // 重载，scrollInfoProvider 保持默认的 null —— 这就是上面注释里关掉动效的开关本身。

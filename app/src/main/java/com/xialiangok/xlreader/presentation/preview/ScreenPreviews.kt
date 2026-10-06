@@ -1,5 +1,6 @@
 package com.xialiangok.xlreader.presentation.preview
 
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import androidx.wear.compose.ui.tooling.preview.WearPreviewLargeRound
@@ -49,8 +50,11 @@ fun HomeScreenPreview() {
     XlReaderTheme {
         HomeScreen(
             dirPath = "/storage/emulated/0",
-            lastBookPath = null,
-            // 预览里没必要做启动定位，也就不必回调。
+            entries = emptyList(),
+            loading = false,
+            locatedPath = null,
+            listState = rememberLazyListState(),
+            // 预览里没必要做定位，也就不必回调。
             autoLocate = false,
             onAutoLocated = {},
             onOpenDirectory = {},
@@ -116,6 +120,7 @@ fun ChapterScreenPreview() {
             onOpenSettings = {},
             menuVisible = false,
             onMenuVisibleChange = {},
+            menuGestureEnabled = false,
         )
     }
 }
@@ -131,6 +136,8 @@ fun ReaderMenuPreview() {
             onBackToFileList = {},
             onOpenSettings = {},
             onDismiss = {},
+            // 预览里开着光标导航，这样能直接看到选中控件的紫色边框。
+            gestureEnabled = true,
         )
     }
 }
