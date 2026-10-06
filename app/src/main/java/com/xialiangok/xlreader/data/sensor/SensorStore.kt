@@ -53,6 +53,7 @@ class SensorStore(context: Context) {
         return JSONObject().apply {
             put("enabled", value.enabled)
             put("intervalMs", value.intervalMs)
+            put("restMs", value.restMs)
             put("pages", pages)
             put("gestures", gestures)
             put("multiGesture", value.multiGesture)
@@ -98,6 +99,15 @@ class SensorStore(context: Context) {
             enabled = json.optBoolean("enabled", true),
             intervalMs = json.optInt("intervalMs", SensorSettings.DEFAULT_INTERVAL_MS)
                 .coerceIn(SensorSettings.MIN_INTERVAL_MS, SensorSettings.MAX_INTERVAL_MS),
+            // 老设置里没有 restMs：默认「不休息」，即一直以来的行为。
+            // -1（停止后续检测）这一挡要原样保留，所以只夹非负的那部分。
+            restMs = json.optInt("restMs", SensorSettings.DEFAULT_REST_MS).let { rest ->
+                if (rest == SensorSettings.REST_STOP_MS) {
+                    rest
+                } else {
+                    rest.coerceIn(SensorSettings.MIN_REST_MS, SensorSettings.MAX_REST_MS)
+                }
+            },
             // 老设置里没有 pages 这个键时，给「全部页面」这份默认值，而不是空集（空集等于手势全废）。
             pages = if (json.has("pages")) pages else GesturePage.entries.toSet(),
             gestures = gestures,

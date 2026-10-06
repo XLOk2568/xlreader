@@ -1,6 +1,7 @@
 package com.xialiangok.xlreader.presentation.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,14 +15,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Button
-import androidx.wear.compose.material3.ButtonDefaults
 import androidx.wear.compose.material3.Card
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.ListSubHeader
@@ -32,18 +33,17 @@ import com.xialiangok.xlreader.data.epub.ReadHistory
 import com.xialiangok.xlreader.data.epub.ReadingPosition
 import com.xialiangok.xlreader.presentation.BindGestureActions
 import com.xialiangok.xlreader.presentation.centeredItemKey
-import com.xialiangok.xlreader.presentation.scrollByItems
+import com.xialiangok.xlreader.presentation.scrollByDp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.xialiangok.xlreader.presentation.theme.LocalReaderPreferences
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
+import com.xialiangok.xlreader.presentation.theme.rgbColor
 
 /** 列表项的 key：靠它把「屏幕上正中央的那一项」反查回具体章节。 */
 private const val CHAPTER_KEY_PREFIX = "chapter:"
 private const val RESUME_KEY = "resume"
-
-/** 顶上那根紫条的底色：用户指定的 rgb(205, 92, 246)。 */
-private val MenuBarColor = Color(0xFF6331BF)
 
 /** 紫条的高度：一条窄带子，钉在顶上也不太占地方。 */
 private val MenuBarHeight = 28.dp
@@ -81,6 +81,10 @@ fun ChapterListScreen(
 ) {
     BackHandler(onBack = onBack)
 
+    // 当前章颜色与顶上紫条颜色都跟着设置走, 页面本身不再写死色值.
+    val prefs = LocalReaderPreferences.current
+    val currentChapterColor = rgbColor(prefs.currentChapterColor)
+
     var saved by remember(book) { mutableStateOf<ReadingPosition?>(null) }
     LaunchedEffect(book) {
         saved = withContext(Dispatchers.IO) { ReadHistory.load(book.dir) }
@@ -94,18 +98,19 @@ fun ChapterListScreen(
 
     // 列表前两项是书名与副标题；有「继续阅读」卡片时整体再往后挪一位。
     // 这样打开目录时会**自动停在正在读的那一章**，不用用户自己翻。
-    // （顶上那根紫条是钉在列表外面的，所以这里不用把它算进去。）
+    // （顶上那根紫条是钉在列表外面的，所以这里不用把它算进去；列表第一项是上边距 Spacer，再 +1。）
     val headerItems = 2 + (if (resume != null) 1 else 0)
-    val scrollTarget = currentChapter?.let { headerItems + it } ?: 0
+    val scrollTarget = currentChapter?.let { 1 + headerItems + it } ?: 0
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
 
     // 菜单开着没有：默认关着（页面显示目录），点紫条开、再点一次关。
     var menuOpen by remember(book) { mutableStateOf(false) }
 
     // 体感手势：单击 = 打开屏幕上正中央的那一项（含「继续阅读」卡片），
-    // 返回 = 关掉目录、回到进来时那一章（和系统返回手势同一条路），翻页 = 按条目滚动。
+    // 返回 = 关掉目录、回到进来时那一章（和系统返回手势同一条路），翻页 = 按像素（dp）滚动。
     BindGestureActions(
         onTap = {
             val key = centeredItemKey(listState) as? String ?: return@BindGestureActions
@@ -119,10 +124,12 @@ fun ChapterListScreen(
             index?.let(onOpenChapter)
         },
         onBack = onBack,
-        onScrollBy = { delta -> scope.launch { scrollByItems(listState, delta) } },
+        onScrollBy = { delta -> scope.launch { scrollByDp(listState, delta, density) } },
     )
 
     WearListScreen(
+        // 目录页不显示系统时间 (正文页同样是 timeText = {}).
+        timeText = {},
         // saved 从 null 变成有值时重算一次滚动位置；开合菜单时也要复位
         // （菜单里只有三个按钮，不复位的话回来时会停在菜单那几项的位置上）。
         resetKey = saved to menuOpen,
@@ -131,6 +138,9 @@ fun ChapterListScreen(
         // 顶上那根紫条：钉住不动，单击在「目录」和「三个按钮」之间切换。
         header = { MenuBar(menuOpen) { menuOpen = !menuOpen } },
     ) {
+        // 上边距用列表首项 Spacer 充当, 这样紫条能贴着屏幕顶部, 留白只加在列表内容上.
+        item { Spacer(Modifier.height(prefs.marginTop.dp)) }
+
         if (menuOpen) {
             item {
                 Button(
@@ -167,8 +177,6 @@ fun ChapterListScreen(
                 ListHeader {
                     Text(
                         text = book.title,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -202,8 +210,6 @@ fun ChapterListScreen(
                         Text(
                             text = titles[resume.chapter],
                             style = MaterialTheme.typography.bodySmall,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -231,15 +237,13 @@ fun ChapterListScreen(
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleSmall,
-                        // 只有「正在读」这一章的章节名染成 rgb(99, 49, 191)，其余名字保持默认色，
+                        // 只有「正在读」这一章的章节名染成当前章颜色，其余名字保持默认色，
                         // 滚到位之后一眼就能认出自己在哪一章。
                         color = if (index == currentChapter) {
-                            Color(0xFFB15FED)
+                            currentChapterColor
                         } else {
                             Color.Unspecified
                         },
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -252,7 +256,7 @@ fun ChapterListScreen(
                         style = MaterialTheme.typography.bodyExtraSmall,
                         // 当前章用强调色标出来，滚到位之后一眼能看到自己在哪。
                         color = if (index == currentChapter) {
-                            Color(0xFFB15FED)
+                            currentChapterColor
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
@@ -261,9 +265,10 @@ fun ChapterListScreen(
                     )
                 }
             }
-
-            item { Spacer(Modifier.height(28.dp)) }
         }
+
+        // 下边距同理, 用列表末尾 Spacer 充当, 目录和按钮两个列表都有.
+        item { Spacer(Modifier.height(prefs.marginBottom.dp)) }
     }
 }
 
@@ -274,26 +279,25 @@ fun ChapterListScreen(
  * 这样文字还塞得下、一条窄带子也不占地方；默认的 minHeight 是 52dp，
  * 但库只在「上层给的最小高度是 0」时才用它（`defaultMinSize` 的规矩），
  * 所以这里显式写死高度是压得下去的。
+ *
+ * 宽度只包住文字（不撑满），外层 Box 负责居中；配色直接用按钮色 + 正文色，
+ * 和页面里其他按钮保持一致。
  */
 @Composable
 private fun MenuBar(menuOpen: Boolean, onToggle: () -> Unit) {
-    Button(
-        onClick = onToggle,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(MenuBarHeight),
-        shape = RectangleShape,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MenuBarColor,
-            contentColor = Color.Black,
-        ),
-        contentPadding = PaddingValues(vertical = 0.dp),
-    ) {
-        Text(
-            // 目录模式提示「点我能开菜单」，菜单模式提示「点我能收起来」。
-            text = if (menuOpen) "✕" else "菜单 ▾",
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Button(
+            onClick = onToggle,
+            modifier = Modifier.height(MenuBarHeight),
+            shape = RectangleShape,
+            colors = readerButtonColors(),
+            contentPadding = PaddingValues(vertical = 0.dp),
+        ) {
+            Text(
+                // 目录模式提示「点我能开菜单」，菜单模式提示「点我能收起来」。
+                text = if (menuOpen) "✕" else "菜单 ▾",
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }

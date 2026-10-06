@@ -5,10 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -48,6 +46,7 @@ import com.xialiangok.xlreader.data.sensor.formatAngle
 import com.xialiangok.xlreader.data.sensor.stepAngleMax
 import com.xialiangok.xlreader.data.sensor.stepAngleMin
 import com.xialiangok.xlreader.data.sensor.stepIntervalMs
+import com.xialiangok.xlreader.data.sensor.stepRestMs
 import com.xialiangok.xlreader.data.sensor.stepSpeed
 import com.xialiangok.xlreader.presentation.theme.ReaderSurface
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
@@ -129,9 +128,12 @@ fun SensorSettingsScreen(
         }
 
         item {
-            StepRow(
+            // 间隔可以直接输入整数：± 一次只走 10ms，从 0 按到 60000 要按很久（用户口径）。
+            NumberStepRow(
                 label = "检测间隔",
-                value = "${settings.intervalMs} ms",
+                value = settings.intervalMs,
+                inputRange = SensorSettings.MIN_INTERVAL_MS..SensorSettings.MAX_INTERVAL_MS,
+                onValueChange = { onChange(settings.copy(intervalMs = it)) },
                 onMinus = {
                     onChange(
                         settings.copy(
@@ -154,6 +156,32 @@ fun SensorSettingsScreen(
                 },
             )
         }
+        item { HintText(INTERVAL_HINT) }
+
+        item {
+            // 触发后休息间隔：0 ~ 5 分钟按 10ms 走，到顶再按 ＋ 变成 -1（触发一次后停止后续检测）。
+            NumberStepRow(
+                label = "触发后休息间隔",
+                value = settings.restMs,
+                inputRange = SensorSettings.MIN_REST_MS..SensorSettings.MAX_REST_MS,
+                onValueChange = { onChange(settings.copy(restMs = it)) },
+                onMinus = {
+                    onChange(
+                        settings.copy(
+                            restMs = stepRestMs(settings.restMs, -SensorSettings.REST_STEP_MS),
+                        ),
+                    )
+                },
+                onPlus = {
+                    onChange(
+                        settings.copy(
+                            restMs = stepRestMs(settings.restMs, SensorSettings.REST_STEP_MS),
+                        ),
+                    )
+                },
+            )
+        }
+        item { HintText(REST_HINT) }
 
         item {
             Button(
@@ -249,7 +277,7 @@ fun SensorSettingsScreen(
                 )
             }
         }
-        item { Spacer(Modifier.height(8.dp)) }
+        item { ControlSpacer() }
         item {
             Button(
                 onClick = onBack,
@@ -260,7 +288,6 @@ fun SensorSettingsScreen(
                 Text("完成", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
-        item { Spacer(Modifier.height(28.dp)) }
     }
 }
 
@@ -279,7 +306,9 @@ fun SensorPagesScreen(
         item {
             Text(
                 text = "只有勾上的页面才会开启手势检测任务；进别的页面会立刻停掉，" +
-                    "一个采样点都不收。",
+                    "一个采样点都不收。\n\n" +
+                    "「正文阅读(菜单)」另外管着阅读菜单里的体感选中光标：不勾它，" +
+                    "菜单开着就只有手指能操作，光标和手势都没有。",
                 style = MaterialTheme.typography.bodyExtraSmall,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
@@ -304,7 +333,7 @@ fun SensorPagesScreen(
             }
         }
 
-        item { Spacer(Modifier.height(10.dp)) }
+        item { ControlSpacer() }
         item {
             Button(
                 onClick = onBack,
@@ -315,7 +344,6 @@ fun SensorPagesScreen(
                 Text("完成", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
-        item { Spacer(Modifier.height(28.dp)) }
     }
 }
 
@@ -389,17 +417,20 @@ fun SensorGestureDetailScreen(
 
         if (gesture.action.hasSpeed) {
             item {
-                // 速度就是「一次触发滚动多少条目」：正文里一条是一段，列表里一条是一项。
-                StepRow(
-                    label = "翻页速度（条目）",
-                    value = gesture.speed.toString(),
+                // 速度就是「一次触发滚动多少 dp」：和条目高度无关，正文与列表滚一样的距离。
+                // 可以直接填整数：上限是「无限」，靠 ＋ 一直按不现实（用户口径）。
+                NumberStepRow(
+                    label = "翻页速度（dp）",
+                    value = gesture.speed,
+                    inputRange = SensorGesture.MIN_SPEED..SensorGesture.MAX_SPEED,
+                    onValueChange = { onChange(gesture.copy(speed = it)) },
                     onMinus = { onChange(gesture.copy(speed = stepSpeed(gesture.speed, -1))) },
                     onPlus = { onChange(gesture.copy(speed = stepSpeed(gesture.speed, +1))) },
                 )
             }
         }
 
-        item { ListSubHeader { Text("角度范围（一次 1°）", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
+        item { ListSubHeader { Text("角度范围（一次 0.1°）", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             Text(
                 // 判定口径讲清楚：当前角度落进这组数字就执行，判定时两侧还会再放宽一点容差，
@@ -479,7 +510,7 @@ fun SensorGestureDetailScreen(
             }
         }
 
-        item { Spacer(Modifier.height(10.dp)) }
+        item { ControlSpacer() }
         item {
             Button(
                 onClick = onDelete,
@@ -500,7 +531,6 @@ fun SensorGestureDetailScreen(
                 Text("完成", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
-        item { Spacer(Modifier.height(28.dp)) }
     }
 }
 
@@ -591,7 +621,6 @@ fun SensorGestureRecordScreen(
                 .padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(28.dp))
             when (phase) {
                 RecordPhase.Countdown -> {
                     Text(
@@ -647,7 +676,7 @@ fun SensorGestureRecordScreen(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            ControlSpacer()
             if (phase == RecordPhase.Failed) {
                 Button(
                     onClick = { attempt += 1 },
@@ -701,7 +730,7 @@ fun SensorPermissionScreen(
         item {
             Text(
                 text = "可能是设备本身没有这个传感器，也可能是系统 / 应用权限里把它关掉了。" +
-                    "应用不联网，传感器数据只在手表本地做判断，不会上传。",
+                    "应用不访问互联网，传感器数据只在手表本地做判断，不会上传。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -709,7 +738,7 @@ fun SensorPermissionScreen(
             )
         }
 
-        item { Spacer(Modifier.height(6.dp)) }
+        item { ControlSpacer() }
         item {
             Button(
                 onClick = onOpenSettings,
@@ -747,12 +776,33 @@ fun SensorPermissionScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        item { Spacer(Modifier.height(28.dp)) }
     }
 }
 
 /** 手改角度一次走 1°；往下走的那一侧用它的相反数。 */
 private const val ANGLE_STEP = SensorGesture.ANGLE_STEP_DEG
+
+/** 设置项下面那行小字说明：居中、次要色，和别处的提示写法一致。 */
+@Composable
+private fun HintText(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyExtraSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+private const val INTERVAL_HINT =
+    "检测间隔（毫秒）：没触发手势时就一直按这个间隔走。" +
+        "0 表示不节流（每个传感器回调都判定），上限 60000。"
+
+private const val REST_HINT =
+    "触发后休息间隔（毫秒）：只影响本轮 —— 这一轮触发了手势就先不采样，" +
+        "歇够这段时间再按检测间隔继续；0 表示不休息。" +
+        "到 5 分钟（300000）再按 ＋ 就是 -1，即触发一次后停止后续检测" +
+        "（离开 / 重进页面或改动设置后恢复）。"
 
 private const val RECORD_HINT =
     "提示：新增手势时先倒计时 3 秒，再在 10 秒内把表摆成要用的姿势；" +

@@ -1,12 +1,9 @@
 package com.xialiangok.xlreader.presentation.screens
 
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
@@ -39,7 +36,7 @@ fun PermissionScreen(
         }
         item {
             Text(
-                text = "应用本身不联网、不上传任何文件；这个权限只用于读取你指定的目录和 epub。",
+                text = "应用本身不访问互联网、不上传任何文件；这个权限只用于读取你指定的目录和 epub。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -47,7 +44,7 @@ fun PermissionScreen(
             )
         }
 
-        item { Spacer(Modifier.height(6.dp)) }
+        item { ControlSpacer() }
         item {
             Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
                 Text("去系统设置授权", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
@@ -68,6 +65,5 @@ fun PermissionScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        item { Spacer(Modifier.height(28.dp)) }
     }
 }

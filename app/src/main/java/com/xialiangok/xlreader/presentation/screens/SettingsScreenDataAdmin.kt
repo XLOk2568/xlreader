@@ -5,9 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -23,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.wear.compose.material3.Button
@@ -108,8 +105,6 @@ fun SettingsDataAdminScreen(
                 Text(
                     text = dirPath,
                     style = MaterialTheme.typography.bodyExtraSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -174,8 +169,6 @@ fun SettingsDataAdminScreen(
                 Text(
                     text = if (isSelected) "✓ ${entry.name}" else entry.name,
                     style = MaterialTheme.typography.titleSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                     color = if (isSelected) {
                         MaterialTheme.colorScheme.primary
                     } else {
@@ -188,7 +181,6 @@ fun SettingsDataAdminScreen(
                     text = if (entry.isDirectory) "文件夹" else formatSize(entry.sizeBytes),
                     style = MaterialTheme.typography.bodyExtraSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -297,7 +289,7 @@ fun SettingsDataAdminScreen(
             }
         }
 
-        item { Spacer(Modifier.height(10.dp)) }
+        item { ControlSpacer() }
         item {
             Button(
                 onClick = onBack,
@@ -308,7 +300,6 @@ fun SettingsDataAdminScreen(
                 Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
-        item { Spacer(Modifier.height(28.dp)) }
     }
 
     // 「复制到哪儿」的询问框：点「复制」后弹出来，三行从上到下铺开
@@ -400,8 +391,6 @@ fun SettingsImportScreen(
                 Text(
                     text = sourceDirPath,
                     style = MaterialTheme.typography.bodyExtraSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -452,8 +441,6 @@ fun SettingsImportScreen(
                 Text(
                     text = entry.name,
                     style = MaterialTheme.typography.titleSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -467,7 +454,7 @@ fun SettingsImportScreen(
             }
         }
 
-        item { Spacer(Modifier.height(10.dp)) }
+        item { ControlSpacer() }
         item {
             Button(
                 onClick = onBack,
@@ -478,6 +465,5 @@ fun SettingsImportScreen(
                 Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
-        item { Spacer(Modifier.height(28.dp)) }
     }
 }

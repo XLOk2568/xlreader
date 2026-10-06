@@ -8,7 +8,7 @@ import kotlin.math.roundToInt
 /**
  * 体感手势能执行的动作。
  *
- * 「退出 / 单击 / 返回」是页面级动作，「向下翻页 / 向上翻页」本身带一个速度（一次滚多少条目）。
+ * 「退出 / 单击 / 返回」是页面级动作，「向下翻页 / 向上翻页」本身带一个速度（一次滚多少 dp）。
  */
 enum class GestureAction(val label: String) {
     /** 退出本应用：结束任务并从最近任务里移除。 */
@@ -20,21 +20,30 @@ enum class GestureAction(val label: String) {
     /** 等价于系统返回：往后退一层。 */
     Back("返回"),
 
-    /** 向下翻页：一次向下滚动 [SensorGesture.speed] 条目。 */
+    /** 向下翻页：一次向下滚动 [SensorGesture.speed] dp。 */
     ScrollDown("向下翻页"),
 
-    /** 向上翻页：一次向上滚动 [SensorGesture.speed] 条目。 */
+    /** 向上翻页：一次向上滚动 [SensorGesture.speed] dp。 */
     ScrollUp("向上翻页");
 
     /** 只有翻页类手势需要「速度」这一项。 */
     val hasSpeed: Boolean get() = this == ScrollDown || this == ScrollUp
 }
 
-/** 手势可以生效的页面（按用户口径只列三个内容页）。 */
+/** 手势可以生效的页面（按用户口径只列内容页）。 */
 enum class GesturePage(val label: String) {
     FileList("文件列表"),
     Catalog("章节目录"),
     Reader("正文阅读"),
+
+    /**
+     * 正文页弹出阅读菜单后的那一层。
+     *
+     * 为什么单独成一页：菜单铺满整屏，这时候翻页/单击/返回都该落在菜单上而不是底下的正文，
+     * 而且菜单里的「选中光标」是可选功能 —— 没勾这一页时菜单开着就不跑检测任务，
+     * 只靠手指操作，一个采样点都不收（见 [com.xialiangok.xlreader.presentation.screens.ReaderMenuOverlay]）。
+     */
+    ReaderMenu("正文阅读(菜单)"),
 }
 
 /**
@@ -56,7 +65,7 @@ enum class MultiGestureMode(val label: String) {
  * 只保存**最大和最小的角度**（roll 横滚 / pitch 俯仰各一对），判定时再按范围放宽一点容差，
  * 所以存储里就是四个数字，人眼可读、也方便以后换判定模型。
  *
- * 录制只是给这组数字一组初值：详情页里可以像字号那样按 **±1° 手改**，
+ * 录制只是给这组数字一组初值：详情页里可以像字号那样按 **±0.1° 手改**，
  * 检测一律以这四个数字为准（不再区分「录的」还是「填的」）。
  */
 @Immutable
@@ -70,20 +79,25 @@ data class SensorGesture(
     val maxPitch: Float = 0f,
     /** 单个手势的开关。 */
     val enabled: Boolean = true,
-    /** 翻页手势一次滚动的条目数（速度）。 */
+    /** 翻页手势一次滚动的距离（dp）。和条目高度无关：同一条手势在正文与列表里滚一样的距离。 */
     val speed: Int = DEFAULT_SPEED,
 ) {
     companion object {
-        const val MIN_SPEED = 1
-        const val MAX_SPEED = 50
-        const val DEFAULT_SPEED = 6
+        /** 翻页速度的下限：2 dp（用户口径「范围 2 到无限」）。 */
+        const val MIN_SPEED = 2
+
+        /** 没有上限（用户口径「范围 2 到无限」），用 Int 的最大值当实际边界。 */
+        const val MAX_SPEED = Int.MAX_VALUE
+
+        /** 默认一次滚 10 dp：检测间隔每拍滚一小段，摆着不动就是连续慢滚。 */
+        const val DEFAULT_SPEED = 10
 
         /** 角度能填的范围，与 [tiltRoll] / [tiltPitch] 的值域一致（atan2 的结果）。 */
         const val MIN_ANGLE_DEG = -180f
         const val MAX_ANGLE_DEG = 180f
 
-        /** 手改角度时一次走 1°（和字号步进一样：精确优先，要调大范围就按住连发）。 */
-        const val ANGLE_STEP_DEG = 1f
+        /** 手改角度时一次走 0.1°（精确优先，要调大范围就按住连发）。 */
+        const val ANGLE_STEP_DEG = 0.1f
     }
 }
 
@@ -92,6 +106,9 @@ data class SensorGesture(
  *
  * @param enabled   总开关。关掉它就完全不再注册传感器（最省电）。
  * @param intervalMs 检测间隔（毫秒）。**所有手势共用一个**，就是传感器回调的周期。
+ *   0 表示不节流（每个传感器回调都判定，最费电），上限 1 分钟。
+ * @param restMs    触发一次后的休息间隔（毫秒），**只影响本轮**：这一轮执行完手势后暂停检测，
+ *   休息结束再按 [intervalMs] 继续；0 表示不休息，[REST_STOP_MS] 表示触发一次后停止后续检测。
  * @param pages     在哪些页面启用手势。不在列表里的页面一进去就不注册传感器。
  * @param gestures  录制好的手势列表。
  * @param multiGesture 多个手势同时命中时是否全部执行。**默认关**：只跑列表里第一个命中的，
@@ -102,6 +119,7 @@ data class SensorGesture(
 data class SensorSettings(
     val enabled: Boolean = true,
     val intervalMs: Int = DEFAULT_INTERVAL_MS,
+    val restMs: Int = DEFAULT_REST_MS,
     val pages: Set<GesturePage> = GesturePage.entries.toSet(),
     val gestures: List<SensorGesture> = emptyList(),
     val multiGesture: Boolean = false,
@@ -120,11 +138,24 @@ data class SensorSettings(
     val gestureMode: MultiGestureMode? get() = if (multiGesture) multiMode else null
 
     companion object {
-        const val MIN_INTERVAL_MS = 50
-        const val MAX_INTERVAL_MS = 2000
+        /** 检测间隔下限 0：不节流，每个传感器回调都判定（用户口径）。 */
+        const val MIN_INTERVAL_MS = 0
+        const val MAX_INTERVAL_MS = 60_000
         /** 默认 200ms ≈ 5Hz，示例代码里推荐的低功耗采样率。 */
         const val DEFAULT_INTERVAL_MS = 200
         const val INTERVAL_STEP_MS = 10
+
+        /** 休息间隔的合法区间：0 ~ 5 分钟。 */
+        const val MIN_REST_MS = 0
+        const val MAX_REST_MS = 300_000
+        const val DEFAULT_REST_MS = 0
+        const val REST_STEP_MS = 10
+
+        /**
+         * 休息间隔在 5 分钟再按 ＋ 的那一挡：不是「休息多久」，而是
+         * **触发一次后彻底停止后续检测**（换页 / 改动设置才会重新开始）。
+         */
+        const val REST_STOP_MS = -1
 
         /** 录制流程：先倒计时 3 秒，再在 10 秒内最多采 200 个点。 */
         const val COUNTDOWN_SECONDS = 3
@@ -216,16 +247,38 @@ fun SensorGesture.matches(roll: Float, pitch: Float): Boolean {
         pitch >= minPitch - pitchSlack && pitch <= maxPitch + pitchSlack
 }
 
-/** 检测间隔走一步（±10ms），夹在合法范围内。 */
+/** 检测间隔走一步（±10ms），夹在合法范围内（0 表示不节流）。 */
 fun stepIntervalMs(ms: Int, delta: Int): Int =
     (ms + delta).coerceIn(SensorSettings.MIN_INTERVAL_MS, SensorSettings.MAX_INTERVAL_MS)
 
-/** 翻页速度走一步（±1 条目），夹在合法范围内。 */
+/**
+ * 休息间隔走一步：0 ~ 5 分钟按 [SensorSettings.REST_STEP_MS] 走，
+ * 到 5 分钟再按 ＋ 变成 [SensorSettings.REST_STOP_MS]（停止后续检测），在那一挡按 ＋ 回到 0。
+ *
+ * 0 这一头**不往下绕**：0 已经等于「不休息」，再变成「停止检测」是语义完全不同的两件事，
+ * 不该由一次误按决定；想停检测就在 5 分钟那一头按 ＋（或直接按到顶）。
+ */
+fun stepRestMs(ms: Int, delta: Int): Int {
+    if (ms == SensorSettings.REST_STOP_MS) {
+        return if (delta > 0) SensorSettings.MIN_REST_MS else SensorSettings.MAX_REST_MS
+    }
+    val next = ms + delta
+    if (next > SensorSettings.MAX_REST_MS) return SensorSettings.REST_STOP_MS
+    return next.coerceIn(SensorSettings.MIN_REST_MS, SensorSettings.MAX_REST_MS)
+}
+
+/** 翻页速度走一步（±1 dp），夹在合法范围内（下限 2，上限等于没有）。 */
 fun stepSpeed(speed: Int, delta: Int): Int =
-    (speed + delta).coerceIn(SensorGesture.MIN_SPEED, SensorGesture.MAX_SPEED)
+    (speed.toLong() + delta).coerceIn(
+        SensorGesture.MIN_SPEED.toLong(),
+        SensorGesture.MAX_SPEED.toLong(),
+    ).toInt()
 
 /**
  * 手改角度**下限**：一次走 [SensorGesture.ANGLE_STEP_DEG]，夹在「最小角度」与当前上限之间。
+ *
+ * 步进结果按 0.1° 对齐：0.1f 这类二进制小数连加会攒出 30.400002 这样的尾巴，
+ * 显示时虽然会四舍五入，判定范围却会跟着抖一点点。
  *
  * 上限那侧也要夹一下，是为了维持 `min ≤ max` —— 区间反过来等于这个手势永远不会命中，
  * 手改时不该允许用户把区间调反。
@@ -236,7 +289,8 @@ fun stepAngleMin(
     delta: Float = SensorGesture.ANGLE_STEP_DEG,
 ): Float {
     val upper = max.coerceIn(SensorGesture.MIN_ANGLE_DEG, SensorGesture.MAX_ANGLE_DEG)
-    return (value + delta).coerceIn(SensorGesture.MIN_ANGLE_DEG, upper)
+    return ((value + delta) * 10f).roundToInt().div(10f)
+        .coerceIn(SensorGesture.MIN_ANGLE_DEG, upper)
 }
 
 /** 手改角度**上限**：一次走 [SensorGesture.ANGLE_STEP_DEG]，夹在当前下限与「最大角度」之间。 */
@@ -246,7 +300,8 @@ fun stepAngleMax(
     delta: Float = SensorGesture.ANGLE_STEP_DEG,
 ): Float {
     val lower = min.coerceIn(SensorGesture.MIN_ANGLE_DEG, SensorGesture.MAX_ANGLE_DEG)
-    return (value + delta).coerceIn(lower, SensorGesture.MAX_ANGLE_DEG)
+    return ((value + delta) * 10f).roundToInt().div(10f)
+        .coerceIn(lower, SensorGesture.MAX_ANGLE_DEG)
 }
 
 /** 单个角度写成给人看的文本，例如 `32.4°`。 */
@@ -262,6 +317,8 @@ fun formatAngle(degrees: Float): String = "${degrees.round1()}°"
  * 处理完一拍后把时刻**对齐到间隔网格**（而不是直接取 `now`）：事件偶尔比间隔早几毫秒时
  * 只是这一拍不采，下一拍照样落在网格上，不会因为抖动跳掉一整拍、把实际间隔翻倍；
  * 落后超过两拍（比如刚从后台回来）则重新对齐到 `now`，不追旧账。
+ *
+ * [intervalMs] 为 0 时永远返回 `nowMs`：设置里的「0」就是「不节流」。
  */
 fun dueSampleTimeMs(nowMs: Long, lastMs: Long, intervalMs: Int): Long? {
     if (lastMs >= 0L && nowMs - lastMs < intervalMs) return null

@@ -1,14 +1,11 @@
 package com.xialiangok.xlreader.presentation.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
@@ -48,7 +45,7 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "版本 1.0.2611.13 · Wear OS\n最低支持 Android 11（API 30)",
+                text = "版本 1.0.2611.24 · Wear OS\n最低支持 Android 11（API 30)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -57,8 +54,7 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "一个安静的 epub 阅读器：黑底灰字、单一强调色，列表与按钮不做缩放渐变，" +
-                    "只保留必要的过渡。",
+                text = "极简，流畅，自定义，体感，免费，开源",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
@@ -66,7 +62,7 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "电子书来自你自己的手表存储，应用不内置任何内容、不联网、" +
+                text = "电子书来自你自己的手表存储，应用不内置任何内容、不访问互联网、" +
                     "不上传任何文件；唯一需要的「所有文件访问」权限只用于读取你指定的目录。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -76,15 +72,11 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "1.增加保持上次打开Path功能\n"+
-                        "2.修改目录逻辑\n"+
-                        "3.修改部分ui\n"+
-                        "4.修复手势和优化手势体感\n"+
-                        "5.优化了导出导入设置的复制功能\n"+
-                        "6.优化了文件目录功能(新增了文件夹颜色和定位上次阅读文件)\n"+
-                        "7.解压图像资源改成.xlr后缀，以免系统收录\n"+
-                        "8.对于增量更新，进行了优化\n"+
-                        "9.增新目录支持手动输入数字跳转",
+                text = "1.优化体感\n"+
+                        "2.新增自定义颜色和边距了\n"+
+                        "3.新增了文件删除等功能"+
+                        "4.新增局域网文件管理功能"+
+                        "相较于1.0.2611.19版本",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -98,12 +90,11 @@ fun AboutScreen(
             }
         }
 
-        item { Spacer(Modifier.height(10.dp)) }
+        item { ControlSpacer() }
         item {
             Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape =RectangleShape, colors = readerButtonColors()) {
                 Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
-        item { Spacer(Modifier.height(28.dp)) }
     }
 }

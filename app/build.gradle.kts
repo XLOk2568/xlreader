@@ -27,7 +27,7 @@ android {
         minSdk = 30
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0.2611.13"
+        versionName = "1.0.2611.25"
     }
 
     signingConfigs {
@@ -101,6 +101,9 @@ dependencies {
     implementation(libs.core.splashscreen)
     implementation(libs.ui)
     implementation(libs.ui.graphics)
+
+    // 局域网文件管理用的迷你 HTTP 服务, 只有这一个类库级别的小依赖 (负责 HTTP 解析 / Range).
+    implementation(libs.nanohttpd)
 
     // 预览注解必须放在 implementation：@Preview 与 @WearPreviewDevices 写在 src/main 里，
     // 放在 debugImplementation 会让 main 源集编译不过，预览也就无从谈起。

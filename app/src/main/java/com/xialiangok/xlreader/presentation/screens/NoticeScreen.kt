@@ -1,13 +1,10 @@
 package com.xialiangok.xlreader.presentation.screens
 
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
@@ -38,13 +35,12 @@ fun NoticeScreen(
             )
         }
         if (onAction != null) {
-            item { Spacer(Modifier.height(10.dp)) }
+            item { ControlSpacer() }
             item {
                 Button(onClick = onAction, modifier = Modifier.fillMaxWidth(), shape = RectangleShape,colors = readerButtonColors()) {
                     Text(actionLabel, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
-        item { Spacer(Modifier.height(28.dp)) }
     }
 }

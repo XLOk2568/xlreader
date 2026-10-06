@@ -23,7 +23,7 @@ data class OpenSourceProject(
  * 不是凭印象写的：androidx 全家桶按「项目」归并（例如 51 个 artifact 归到
  * AndroidX / Compose / Wear Compose 等 8 条），否则手表小屏上根本列不下。
  *
- * 这些项目全部使用 Apache License 2.0。
+ * 这些项目除 NanoHTTPD (BSD-3-Clause) 外都是 Apache License 2.0。
  */
 val bundledOpenSourceProjects: List<OpenSourceProject> = listOf(
 
@@ -58,24 +58,19 @@ val bundledOpenSourceProjects: List<OpenSourceProject> = listOf(
         note = "语言运行时",
     ),
     OpenSourceProject(
+        name = "NanoHTTPD",
+        license = "BSD-3-Clause",
+        note = "局域网文件管理的迷你 HTTP 服务（含 Range 断点续传）",
+    ),
+    OpenSourceProject(
         name = "kotlinx.coroutines",
         license = "Apache-2.0",
         note = "协程与主线程调度，Compose 的异步基础",
     ),
     OpenSourceProject(
-        name = "androidx.profileinstaller",
+        name = "androidx",
         license = "Apache-2.0",
-        note = "首次启动时安装 baseline profile，使后续启动与滚动更流畅",
-    ),
-    OpenSourceProject(
-        name = "AndroidX SplashScreen",
-        license = "Apache-2.0",
-        note = "纯黑启动画面，避免启动瞬间闪白",
-    ),
-    OpenSourceProject(
-        name = "AndroidX graphics-path / shapes",
-        license = "Apache-2.0",
-        note = "矢量路径与形状的原生实现（Compose 的传递依赖）",
+        note = "https://github.com/androidx/androidx",
     ),
 )
 

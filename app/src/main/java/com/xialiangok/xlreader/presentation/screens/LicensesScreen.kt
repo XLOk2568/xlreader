@@ -3,9 +3,7 @@ package com.xialiangok.xlreader.presentation.screens
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
@@ -48,8 +45,8 @@ fun LicensesScreen(onBack: () -> Unit) {
         }
         item {
             Text(
-                text = "本应用不联网、不采集数据。以下项目随应用一同分发，" +
-                    "全部使用 Apache License 2.0。",
+                text = "本应用不访问互联网、不采集数据。以下项目随应用一同分发" +
+                    "除 NanoHTTPD 使用 BSD-3-Clause 外均为 Apache License 2.0，当然本项目是MIT协议",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -76,10 +73,10 @@ fun LicensesScreen(onBack: () -> Unit) {
             )
         }
 
-        item { ListSubHeader { Text("", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
+        item { ListSubHeader { Text("感谢测试", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             Text(
-                text = ""+"\n",
+                text = "NCSmaoliang"+"\nhttps://github.com/NCSmaoliang",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -87,13 +84,12 @@ fun LicensesScreen(onBack: () -> Unit) {
             )
         }
 
-        item { Spacer(Modifier.height(10.dp)) }
+        item { ControlSpacer() }
         item {
             Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape = RectangleShape,colors = readerButtonColors()) {
                 Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
-        item { Spacer(Modifier.height(28.dp)) }
     }
 }
 
@@ -115,8 +111,6 @@ private fun LicenseCard(project: OpenSourceProject) {
         Text(
             text = project.name,
             style = MaterialTheme.typography.titleSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )

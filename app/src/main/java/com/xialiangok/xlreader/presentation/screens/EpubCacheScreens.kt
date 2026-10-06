@@ -2,16 +2,16 @@ package com.xialiangok.xlreader.presentation.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
@@ -20,17 +20,32 @@ import androidx.wear.compose.material3.Text
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
 
 /**
- * 解压进度页。
+ * 解压/询问期间强制屏幕常亮.
  *
- * 首次打开一本书（或用户选择「更新缓存」）时会走这里：
- * 把 epub 解压到与原书同名的目录。大书上这一步要几秒，所以给一个明确的百分比，
- * 而不是让人对着「正在解压并读取」发呆。
+ * 手表熄屏很快, 解压一本大书时用户得反复抬手点亮屏幕, 所以这两页不跟「阅读时常亮」设置,
+ * 只要还在这一页就一直亮着, 离开时立刻还回去.
+ */
+@Composable
+private fun KeepScreenOn() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
+}
+
+/**
+ * 解压进度页.
+ *
+ * 首次打开一本书 (或用户选择「更新缓存」) 时会走这里,
+ * 把 epub 解压到与原书同名的目录, 并给出明确的百分比.
  */
 @Composable
 fun ExtractingScreen(
     fileName: String,
     progress: Float,
 ) {
+    KeepScreenOn()
     val safe = progress.coerceIn(0f, 1f)
     val percent = (safe * 100).toInt()
 
@@ -42,8 +57,6 @@ fun ExtractingScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -89,7 +102,6 @@ fun ExtractingScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        item { Spacer(Modifier.height(28.dp)) }
     }
 }
 
@@ -106,6 +118,7 @@ fun CachePromptScreen(
     onRefresh: () -> Unit,
     onCancel: () -> Unit,
 ) {
+    KeepScreenOn()
     WearListScreen {
         item { ListHeader { Text("已有解压缓存", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
@@ -114,8 +127,6 @@ fun CachePromptScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -148,6 +159,5 @@ fun CachePromptScreen(
                 Text("取消", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
-        item { Spacer(Modifier.height(28.dp)) }
     }
 }

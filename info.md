@@ -30,9 +30,9 @@
 
 ## app/src/main/java/com/xialiangok/xlreader/data/ReaderPreferences.kt
 
-* 作用：封装阅读器的全部偏好（字号、段距、常亮、文字颜色、亮度等），并提供纯函数工具（颜色打包、步进器等）。
-* 主要符号：`ReaderPreferences`、`applyBrightness`、`packRgb`、`stepFontSize`、`spacingLabel`、`formatScreenBrightness` 等。
-* 细节/注意：偏好值范围在 companion object 中定义；纯算法函数可用于单元测试；`textColor` 存储为低 24 位 (0xRRGGBB)，保存/读取时需注意掩码处理。
+* 作用：封装阅读器的全部偏好（标题/正文/小字三档字号、段距、上下边距、大多控件间距、常亮、文字颜色、亮度、强调色等），并提供纯函数工具（颜色打包、步进器等）。
+* 主要符号：`ReaderPreferences`、`applyBrightness`、`packRgb`、`stepFontSize`、`stepMargin`、`stepControlSpacing`、`spacingLabel`、`formatScreenBrightness` 等。
+* 细节/注意：偏好值范围在 companion object 中定义；纯算法函数可用于单元测试；`textColor`/`accentColor` 存储为低 24 位 (0xRRGGBB)，保存/读取时需注意掩码处理；上下边距最小 2dp、每次 ±1、无上限，默认 32dp；大多控件间距 0..999、每次 ±1、默认 10dp，用于替换各页原本写死的中间分隔 Spacer；`effectiveSecondaryTextColor` 由主文字色压暗得到，「强调色」独立可调。
 
 \---
 
@@ -47,8 +47,8 @@
 ## app/src/main/java/com/xialiangok/xlreader/data/file/LocalFiles.kt
 
 * 作用：文件浏览与文件类型判断工具，供主页文件浏览与 data 目录管理使用。
-* 主要符号：`FileEntry` (数据类)、`hasAllFilesAccess()`、`defaultRootPath()`、`File.isReadableBook()`、`listDirectory()`、`parentWithinRoot()`、`displayPath()`、`formatSize()`。
-* 细节/注意：`listDirectory` 仅返回子目录和 `.epub` 文件以适配手表小屏；`hasAllFilesAccess()` 依赖 API 30 的 `Environment.isExternalStorageManager()`。
+* 主要符号：`FileEntry` (数据类)、`hasAllFilesAccess()`、`defaultRootPath()`、`File.isReadableBook()`、`listDirectory()`、`parentWithinRoot()`、`displayPath()`、`formatSize()`、`transferEntry()`、`renameEntry()`。
+* 细节/注意：`listDirectory` 仅返回子目录和 `.epub` 文件以适配手表小屏；`hasAllFilesAccess()` 依赖 API 30 的 `Environment.isExternalStorageManager()`。`transferEntry(source, targetDir, move)` 是主页选择模式的复制 / 移动：拒绝把目录挪进它自己里面、拒绝原地粘贴，移动先试 `renameTo` 再退化成拷贝 + 删源；同名目标覆盖 / 合并（与数据管理页的粘贴一致）。`renameEntry(source, newName)` 改名，如果改的是 epub 还会把旁边同名的解压缓存目录（epub 去掉扩展名）一起改名，否则改名后的书会被当成没有缓存重新解压。
 
 \---
 
@@ -160,8 +160,9 @@
 * 主要符号：`TiltGestureDetector`（start/stop、onSensorChanged 节流与匹配逻辑）、`TiltRecorder`（用于录制采样）、`dueSampleTimeMs` 等。
 * 细节/注意：
 
-  * 仅注册 accelerometer，并在应用层再次节流（因为设备 ODR 未必符合建议采样率）；
+  * 仅注册 accelerometer，并在应用层再次节流（因为设备 ODR 未必符合建议采样率；检测间隔填 0 即不节流，每拍都判定）；
   * 支持多手势策略（默认只执行第一个命中项，也可 simultaneous 或 sequential）；
+  * 触发后休息间隔（仅限本轮）：正数表示这一轮触发后先注销监听、歇够再由 Handler 自动重新注册（休息期零采样，最省电）；`-1` 表示触发一次后彻底停止后续检测，换页 / 改动设置才会重新 start；
   * 录制器最多收 `MAX\\\\\\\\\\\\\\\_SAMPLES`，并提供 `result()` 返回角度范围。
 
 \---
@@ -213,22 +214,22 @@
 ## app/src/main/java/com/xialiangok/xlreader/presentation/WearListScreen.kt
 
 * 作用：通用页面骨架（时间文本、LazyColumn 列表、点击处理），并且追求“减少视觉动效”。
-* 主要符号：`WearListScreen` 可接收 `resetKey`/`startIndex`/`listState`/`onTap` 等参数。
-* 细节/注意：使用普通 `LazyColumn`（无缩放/渐变效果），在 `resetKey` 改变时跳回 `startIndex`；**不给 `ScreenScaffold` 传 `scrollState`**，于是时间文本没有 scrollAway 动效；`scrollIndicator` 恒传 `null`（全应用不显示滚动指示条——库只有在传了 `scrollState` 的分支里才会把指示条 align 到 CenterEnd，不传 `scrollState` 时指示条会落在左上角，所以干脆整条不要）。
+* 主要符号：`WearListScreen` 可接收 `resetKey`/`startIndex`/`listState`/`onTap`/`applyTopMargin` 等参数。
+* 细节/注意：使用普通 `LazyColumn`（无缩放/渐变效果），在 `resetKey` 改变时跳回 `startIndex`；**不给 `ScreenScaffold` 传 `scrollState`**，于是时间文本没有 scrollAway 动效；默认的 `timeText` 按 `ReaderPreferences.timeDisplay` 三选一——`WearUI` 用库自带的弧形时间、`PhoneUI` 用自定义的 15sp 无弧度数字时间（每分钟刷新，底下垫一条纯黑，挡住滚到数字后面的列表内容）、`None` 不显示，正文页与目录页显式传 `timeText = {}` 所以始终没有时间；`scrollIndicator` 恒传 `null`（全应用不显示滚动指示条——库只有在传了 `scrollState` 的分支里才会把指示条 align 到 CenterEnd，不传 `scrollState` 时指示条会落在左上角，所以干脆整条不要）；内容区上下留白**替换**系统默认的屏高 10%，改由 `ReaderPreferences.marginTop/marginBottom` 决定，`applyTopMargin = false` 时上边距不生效（目录页顶上钉了紫条）；同文件提供 `ControlSpacer()`，各页中间分隔 Spacer 统一取设置里的 `controlSpacing`。
 
 \---
 
 ## presentation/screens 中的 UI 页面（逐项摘要）
 
 * AboutScreen.kt：关于页，展示版本、应用说明，链接到 LicensesScreen；使用 `bundledOpenSourceProjects` 显示开源项目数量。
-* HomeScreen.kt（主页 / 文件浏览）：列出当前目录的子目录与 epub 文件，支持手势（单击＝打开中心项、返回＝上一级、翻页＝按条目滚动），IO 在协程中进行。文件名着色：文件夹用 rgb(224,159,0)，「最近打开」的那本 epub 用 rgb(204,91,246)（由 xlrLatest.txt 按文件名指认，标记文件本身不进列表）；应用启动后第一次进这一页会自动滚到那本 epub 上，标记不可用时退回定位上次打开路径。
+* HomeScreen.kt（主页 / 文件浏览）：列出当前目录的子目录与 epub 文件，支持手势（单击＝打开中心项、返回＝上一级、翻页＝按像素滚动），IO 在协程中进行。文件名着色：文件夹用设置里的文件夹色，「最近打开」的那本 epub 用最近打开色（由 xlrLatest.txt 按文件名指认，标记文件本身不进列表）；应用启动后第一次进这一页会自动滚到那本 epub 上，标记不可用时退回定位上次打开路径。底部「切换至」有四个模式按钮（顺序：选择模式 / 重命名模式 / 插件模式 / 浏览模式），默认浏览模式：条目照常打开、下方是退出本应用 / 设置 / 关于。选择模式下每个条目左侧多一个复选框（当前章节颜色、勾跟随正文字号），点条目本体仍进目录 / 开书、点复选框才勾选；下方换成移动 / 复制 / 粘贴 / 删除（移动、复制先放进剪贴板，进目标目录再粘贴；删除前弹确认框）。重命名模式只能选一项并显示重命名按钮，若选的是 epub 会连同名解压目录一起改名。插件模式暂未实现，先按浏览模式展示。文件操作后通过 `onFilesChanged` 让根组件重读目录。
 * ChapterListScreen.kt（章节列表）：展示书名/作者/章节名，若有历史记录会显示“继续阅读”卡片并自动滚动到当前章节。
 * ChapterScreen.kt（正文页）：一次加载一章，支持图片按需降采样、阅读菜单（ReaderMenuOverlay）、阅读进度写入（延时 500ms 写一次）与手势绑定（单击弹菜单、系统返回为返回文件列表等）。
-* ReaderMenu.kt（阅读快捷菜单）：覆盖全屏、无淡入淡出、包含字号/段距/亮度/颜色/常亮等设置，修改后直接写回 `ReaderPreferences`；包含 `StepRow` 与 `StepButton` 的步进逻辑（长按连发）。
-* SettingsScreen.kt（设置页）：调整字号/段距/显示选项，并提供进入体感手势与数据管理的入口。
+* ReaderMenu.kt（阅读快捷菜单）：覆盖全屏、无淡入淡出；设置项收进「亮度与显示 / 字体显示 / 文本显示」三个可折叠分组（默认收起，点一下展开、再点收起，展开另一组时原组自动收起），分组里分别是常亮+屏幕亮度、文字亮度+文字颜色恢复默认、字号+段间距；内容只让下边距生效；体感光标只在当前可见的行里走（分组标题也可落光标）。包含 `StepRow`、`NumberStepRow` 与 `StepButton` 的步进逻辑（长按连发）。
+* SettingsScreen.kt（设置页）：标题/正文/小字三档字号、段间距、上下边距、大多控件间距（0..999，可内联填整数）、文字颜色 RGB＋恢复默认、强调色 RGB＋恢复默认、时间显示（WearUI / PhoneUI / None，展开后三个不撑满宽度的按钮，选中的带勾），并提供进入体感手势与数据管理的入口。各页首尾用作上下留白的 Spacer 已删除，中间分隔统一用 `ControlSpacer()`（高度取 `controlSpacing`，原先没有 Spacer 的页面不新增）。
 * SettingsScreenDataAdmin.kt（data 目录管理）：浏览应用私有 data、复制/粘贴/删除文件，导出设置到内部存储根并支持导入 zip 覆盖。I/O 操作在协程的 IO 线程中执行。
-* SensorSettings.kt（手势设置）：体感手势的总开关、检测间隔、多手势策略、启用页面、手势列表与新增入口，页面仅负责展示与修改，实际检测由根组件管理。
-* EpubCacheScreens.kt（解压 / 缓存询问）：`ExtractingScreen` 显示解压进度，`CachePromptScreen` 提示已有缓存并提供“直接阅读 / 重新解压 / 取消”选项。
+* SensorSettings.kt（手势设置）：体感手势的总开关、检测间隔（0 ~ 60000ms，`NumberStepRow` 可直填整数）、触发后休息间隔（0 ~ 5 分钟，到顶再 ＋ 为 -1＝触发一次后停止后续检测）、多手势策略、启用页面、手势列表与新增入口，页面仅负责展示与修改，实际检测由根组件管理。
+* EpubCacheScreens.kt（解压 / 缓存询问）：`ExtractingScreen` 显示解压进度，`CachePromptScreen` 提示已有缓存并提供“直接阅读 / 重新解压 / 取消”选项；两页都会强制屏幕常亮（手表息屏快，解压一本大书时不该反复抬手点亮），离开即还回。
 * LicensesScreen.kt：列出开源项目卡片。
 * NoticeScreen.kt：通用信息页（标题 + 说明 + 可选按钮），用于加载中、错误、权限引导等。
 * PermissionScreen.kt：引导用户去系统设置打开「所有文件访问」权限。

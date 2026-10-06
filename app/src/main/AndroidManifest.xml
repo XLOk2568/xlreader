@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-      本应用不联网、不采集数据，唯一的敏感权限是「所有文件访问」：
+      本应用不访问互联网、不采集数据，唯一的敏感权限是「所有文件访问」：
       Android 11（API 30）起，读取 .epub 这类非媒体文件无法靠 READ_EXTERNAL_STORAGE 完成，
       只能走 SAF（Wear OS 没有系统文件选择器）或 MANAGE_EXTERNAL_STORAGE。
       因此这里按文件浏览器类应用的常规做法申请后者，由用户在系统设置里显式授权。
@@ -11,6 +11,14 @@
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="AllFilesAccessPolicy,ScopedStorage" />
+
+    <!--
+      局域网文件管理: 在手表上开一个 HTTP 服务, 同一 Wi-Fi 里的手机用浏览器传书.
+      INTERNET 是监听 socket 也要的; ACCESS_NETWORK_STATE 用来确认当前连的是 Wi-Fi 并取本机 IP.
+      只监听局域网, 不做任何外网请求.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <uses-feature android:name="android.hardware.type.watch" />
 

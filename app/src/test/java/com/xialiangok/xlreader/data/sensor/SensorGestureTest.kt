@@ -108,20 +108,44 @@ class SensorGestureTest {
         assertFalse(gesture(30f, 40f, -5f, 5f).matches(35f, 60f))
     }
 
-    /** 翻页速度夹在 1..50。 */
+    /** 翻页速度夹在 2..没有上限（dp）。 */
     @Test
     fun `speed steps stay in range`() {
         assertEquals(SensorGesture.MIN_SPEED, stepSpeed(SensorGesture.MIN_SPEED, -1))
         assertEquals(SensorGesture.MAX_SPEED, stepSpeed(SensorGesture.MAX_SPEED, +1))
-        assertEquals(7, stepSpeed(6, +1))
+        assertEquals(11, stepSpeed(10, +1))
     }
 
-    /** 检测间隔夹在 50..2000 毫秒，一步 10 毫秒。 */
+    /** 检测间隔夹在 0..60000 毫秒，一步 10 毫秒。 */
     @Test
     fun `interval steps stay in range`() {
         assertEquals(SensorSettings.MIN_INTERVAL_MS, stepIntervalMs(SensorSettings.MIN_INTERVAL_MS, -10))
         assertEquals(SensorSettings.MAX_INTERVAL_MS, stepIntervalMs(SensorSettings.MAX_INTERVAL_MS, +10))
         assertEquals(210, stepIntervalMs(200, +10))
+    }
+
+    /** 休息间隔 0..5 分钟按 10ms 走，到顶再＋变 -1（停止后续检测），-1 再＋回到 0。 */
+    @Test
+    fun `rest steps run up to five minutes then the stop value`() {
+        assertEquals(10, stepRestMs(0, +10))
+        assertEquals(0, stepRestMs(0, -10))
+        assertEquals(
+            SensorSettings.REST_STOP_MS,
+            stepRestMs(SensorSettings.MAX_REST_MS, +10),
+        )
+        assertEquals(0, stepRestMs(SensorSettings.REST_STOP_MS, +10))
+        assertEquals(
+            SensorSettings.MAX_REST_MS,
+            stepRestMs(SensorSettings.REST_STOP_MS, -10),
+        )
+    }
+
+    /** 间隔填 0 就是「不节流」：每一拍都判定（不是「永远不采」）。 */
+    @Test
+    fun `zero interval samples every event`() {
+        assertEquals(100L, dueSampleTimeMs(100L, -1L, 0))
+        assertEquals(150L, dueSampleTimeMs(150L, 100L, 0))
+        assertEquals(100L, dueSampleTimeMs(100L, 100L, 0))
     }
 
     /** 总开关关掉时，任何页面都不检测。 */
@@ -165,33 +189,39 @@ class SensorGestureTest {
 
         assertEquals(GesturePage.entries.toSet(), settings.pages)
         assertEquals(SensorSettings.DEFAULT_INTERVAL_MS, settings.intervalMs)
+        // 默认不休息：触发后照常按检测间隔走（一直以来的行为）。
+        assertEquals(SensorSettings.DEFAULT_REST_MS, settings.restMs)
         assertEquals(GestureAction.Tap, SensorGesture(id = "x", name = "x").action)
         assertEquals(SensorGesture.DEFAULT_SPEED, SensorGesture(id = "x", name = "x").speed)
         assertTrue(GestureAction.ScrollDown.hasSpeed)
         assertFalse(GestureAction.Tap.hasSpeed)
     }
 
-    /** 手改角度下限：一次 1°，且不会越过上限（区间反过来这个手势就永远不会命中）。 */
+    /** 手改角度下限：一次 0.1°，不会越过上限，步进结果按 0.1° 对齐。 */
     @Test
     fun `angle min steps clamp to the upper bound`() {
-        assertEquals(31f, stepAngleMin(30f, 60f, +1f), 0.001f)
-        assertEquals(60f, stepAngleMin(60f, 60f, +1f), 0.001f)
+        assertEquals(30.1f, stepAngleMin(30f, 60f), 0.0001f)
+        // 连加不攒浮点尾巴
+        var value = 30f
+        repeat(4) { value = stepAngleMin(value, 60f) }
+        assertEquals(30.4f, value, 0.0001f)
+        assertEquals(60f, stepAngleMin(60f, 60f), 0.0001f)
         assertEquals(
             SensorGesture.MIN_ANGLE_DEG,
-            stepAngleMin(SensorGesture.MIN_ANGLE_DEG, 60f, -1f),
-            0.001f,
+            stepAngleMin(SensorGesture.MIN_ANGLE_DEG, 60f, -0.1f),
+            0.0001f,
         )
     }
 
-    /** 手改角度上限：一次 1°，且不会越过下限。 */
+    /** 手改角度上限：一次 0.1°，不会越过下限。 */
     @Test
     fun `angle max steps clamp to the lower bound`() {
-        assertEquals(29f, stepAngleMax(30f, 10f, -1f), 0.001f)
-        assertEquals(10f, stepAngleMax(10f, 10f, -1f), 0.001f)
+        assertEquals(29.9f, stepAngleMax(30f, 10f, -0.1f), 0.0001f)
+        assertEquals(10f, stepAngleMax(10f, 10f, -0.1f), 0.0001f)
         assertEquals(
             SensorGesture.MAX_ANGLE_DEG,
-            stepAngleMax(SensorGesture.MAX_ANGLE_DEG, 10f, +1f),
-            0.001f,
+            stepAngleMax(SensorGesture.MAX_ANGLE_DEG, 10f, +0.1f),
+            0.0001f,
         )
     }
 

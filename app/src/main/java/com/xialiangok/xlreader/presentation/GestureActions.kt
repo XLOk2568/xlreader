@@ -1,11 +1,14 @@
 package com.xialiangok.xlreader.presentation
 
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 
 /**
@@ -29,7 +32,7 @@ class GestureActionHolder {
     /** 等价于系统返回。 */
     var onBack: (() -> Unit)? = null
 
-    /** 按条目滚动，正数向下、负数向上。 */
+    /** 按像素（dp）滚动，正数向下、负数向上。 */
     var onScrollBy: ((Int) -> Unit)? = null
 
     fun bind(token: Any) {
@@ -87,13 +90,12 @@ fun centeredItemKey(listState: LazyListState): Any? {
 }
 
 /**
- * 按条目滚动：直接跳到「当前第一条 ± delta」条。
+ * 按像素（dp）滚动：手势里的「速度」就是一次滚多少 dp，和条目高度无关。
  *
- * 用 [LazyListState.scrollToItem] 而不是按像素滚 —— 手势里说的「速度」就是条目数，
- * 而且这个调用没有任何动画，符合本应用「不做动效」的取向。
+ * 用 [scrollBy] 直接派发原始增量，没有任何动画，符合本应用「不做动效」的取向；
+ * 滚到尽头时多出来的那部分自然被丢掉，不会因为目标越界而整段不动。
  */
-suspend fun scrollByItems(listState: LazyListState, delta: Int) {
-    if (delta == 0) return
-    val target = (listState.firstVisibleItemIndex + delta).coerceAtLeast(0)
-    listState.scrollToItem(target)
+suspend fun scrollByDp(listState: LazyListState, deltaDp: Int, density: Density) {
+    if (deltaDp == 0) return
+    listState.scrollBy(with(density) { deltaDp.dp.toPx() })
 }
