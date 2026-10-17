@@ -2,17 +2,19 @@ package com.xialiangok.xlreader.presentation.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
@@ -22,19 +24,20 @@ import androidx.wear.compose.material3.SwitchButton
 import androidx.wear.compose.material3.Text
 import com.xialiangok.xlreader.data.ReaderPreferences
 import com.xialiangok.xlreader.data.TimeDisplay
-import com.xialiangok.xlreader.data.blueOf
-import com.xialiangok.xlreader.data.greenOf
-import com.xialiangok.xlreader.data.packRgb
-import com.xialiangok.xlreader.data.redOf
+import com.xialiangok.xlreader.data.file.appDataDir
+import com.xialiangok.xlreader.data.appendAppLog
+import com.xialiangok.xlreader.data.lan.ensureLanIpFile
 import com.xialiangok.xlreader.data.spacingLabel
-import com.xialiangok.xlreader.data.stepAlpha
-import com.xialiangok.xlreader.data.stepChannel
 import com.xialiangok.xlreader.data.stepControlSpacing
 import com.xialiangok.xlreader.data.stepFontSize
+import com.xialiangok.xlreader.data.stepHomeHover
 import com.xialiangok.xlreader.data.stepMargin
 import com.xialiangok.xlreader.data.stepSpacingLevel
+import com.xialiangok.xlreader.presentation.BindGestureActions
+import com.xialiangok.xlreader.presentation.scrollByDp
+import com.xialiangok.xlreader.presentation.theme.readerButtonBorder
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
-import com.xialiangok.xlreader.presentation.theme.rgbColor
+import kotlinx.coroutines.launch
 
 /**
  * 设置页.
@@ -43,26 +46,40 @@ import com.xialiangok.xlreader.presentation.theme.rgbColor
  * 所以在哪边改都一样, 改完两边都生效.
  *
  * 阅读排版先收起, 点按钮才展开详细设置.
- * 颜色分成「文字颜色」(正文 / 当前章 / 文件夹名 / 最近打开) 与
- * 「控件颜色」(强调色 / 背景 / 按钮 / 目录开关条) 两大折叠分组, 默认都收起.
+ * 2026-10-31 起颜色不再在这一页调: 原来的「文字颜色」「控件颜色」两组删掉,
+ * 只留一个「主题设置」按钮, 进独立的 themescreen.kt 里选主题 / 改五色.
  */
 @Composable
 fun SettingsScreen(
   preferences: ReaderPreferences,
   onPreferencesChange: (ReaderPreferences) -> Unit,
+  sensorEnabled: Boolean,
+  onSensorEnabledChange: (Boolean) -> Unit,
   onOpenSensorSettings: () -> Unit,
+  onOpenLanIp: () -> Unit,
   onOpenDataAdmin: () -> Unit,
+  onOpenTheme: () -> Unit,
   onBack: () -> Unit,
 ) {
   BackHandler(onBack = onBack)
 
   // 展开状态只活在这一页; 离开再进来全部收起.
   var layoutExpanded by remember { mutableStateOf(false) }
-  var textColorsExpanded by remember { mutableStateOf(false) }
-  var controlColorsExpanded by remember { mutableStateOf(false) }
   var timeDisplayExpanded by remember { mutableStateOf(false) }
 
-  WearListScreen {
+  val listState = rememberLazyListState()
+  val scope = rememberCoroutineScope()
+  val density = LocalDensity.current
+  val context = LocalContext.current
+
+  // 体感手势: 这一页只需「返回」和「上下翻页」(列表很长, 靠拨动手腕翻最省力),
+  // 没有「单击打开正中央那一项」的概念, 所以不登记单击.
+  BindGestureActions(
+    onBack = onBack,
+    onScrollBy = { delta -> scope.launch { scrollByDp(listState, delta, density) } },
+  )
+
+  WearListScreen(listState = listState) {
     item {
       ListHeader {
         Text(
@@ -127,6 +144,23 @@ fun SettingsScreen(
           },
         )
       }
+      // 文件列表条目名 (文件夹名 / 文件名) 单独一档字号, 不跟着正文或标题走.
+      item(key = "layout.fileListFont") {
+        StepRow(
+          label = "文件列表字号",
+          value = preferences.fileListFontSize.toString(),
+          onMinus = {
+            onPreferencesChange(
+              preferences.copy(fileListFontSize = stepFontSize(preferences.fileListFontSize, -1)),
+            )
+          },
+          onPlus = {
+            onPreferencesChange(
+              preferences.copy(fileListFontSize = stepFontSize(preferences.fileListFontSize, +1)),
+            )
+          },
+        )
+      }
       item(key = "layout.spacing") {
         StepRow(
           label = "段间距",
@@ -168,6 +202,40 @@ fun SettingsScreen(
           },
         )
       }
+      // 顶部悬浮时间是全局那一行时间 (只有 PhoneUI 有), 底部悬浮按钮是文件列表上那个 ▲.
+      // 两者都只是贴边距离, 0..999, 每次 1dp.
+      item(key = "layout.homeHoverTop") {
+        StepRow(
+          label = "顶部悬浮上边距",
+          value = preferences.homeHoverTop.toString(),
+          onMinus = {
+            onPreferencesChange(
+              preferences.copy(homeHoverTop = stepHomeHover(preferences.homeHoverTop, -1)),
+            )
+          },
+          onPlus = {
+            onPreferencesChange(
+              preferences.copy(homeHoverTop = stepHomeHover(preferences.homeHoverTop, +1)),
+            )
+          },
+        )
+      }
+      item(key = "layout.homeHoverBottom") {
+        StepRow(
+          label = "底部悬浮下边距",
+          value = preferences.homeHoverBottom.toString(),
+          onMinus = {
+            onPreferencesChange(
+              preferences.copy(homeHoverBottom = stepHomeHover(preferences.homeHoverBottom, -1)),
+            )
+          },
+          onPlus = {
+            onPreferencesChange(
+              preferences.copy(homeHoverBottom = stepHomeHover(preferences.homeHoverBottom, +1)),
+            )
+          },
+        )
+      }
       // 页内分隔 Spacer 的统一高度, 0..999, 可以内联直接填整数.
       item(key = "layout.controlSpacing") {
         NumberStepRow(
@@ -189,102 +257,20 @@ fun SettingsScreen(
       }
     }
 
-    // ---- 文字颜色: 正文 / 当前章 / 文件夹名 / 最近打开 ----
-    item(key = "textColors.toggle") {
-      ExpandButton("文字颜色", textColorsExpanded, fillWidth = true) { textColorsExpanded = !textColorsExpanded }
-    }
-    if (textColorsExpanded) {
-      item(key = "textColors.text.preview") {
-        ColorPreview(
-          label = "正文文字",
-          rgb = preferences.effectiveTextColor,
-          alpha = preferences.textColorAlpha,
+    // ---- 主题: 颜色统一收在独立的主题页里 ----
+    item(key = "theme.open") {
+      Button(
+        onClick = onOpenTheme,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RectangleShape,
+        colors = readerButtonColors(),
+        border = readerButtonBorder(),
+      ) {
+        Text(
+          text = "主题设置(using:${preferences.themeName})",
+          textAlign = TextAlign.Center,
+          modifier = Modifier.fillMaxWidth(),
         )
-      }
-      item(key = "textColors.text.channels") {
-        ColorChannelRows(
-          rgb = preferences.textColor,
-          onRgbChange = { onPreferencesChange(preferences.copy(textColor = it)) },
-        )
-      }
-      item(key = "textColors.text.alpha") {
-        AlphaRow(
-          value = preferences.textColorAlpha,
-          onChange = { onPreferencesChange(preferences.copy(textColorAlpha = it)) },
-        )
-      }
-      colorSection("当前章节颜色", "textColors.currentChapter", preferences.currentChapterColor) {
-        onPreferencesChange(preferences.copy(currentChapterColor = it))
-      }
-      colorSection("文件夹名颜色", "textColors.folder", preferences.folderColor) {
-        onPreferencesChange(preferences.copy(folderColor = it))
-      }
-      colorSection("最近打开颜色", "textColors.latest", preferences.latestColor) {
-        onPreferencesChange(preferences.copy(latestColor = it))
-      }
-      item(key = "textColors.reset") {
-        ResetButton("文字颜色恢复默认") {
-          onPreferencesChange(
-            preferences.copy(
-              textColor = ReaderPreferences.DEFAULT_TEXT_COLOR,
-              textColorAlpha = ReaderPreferences.DEFAULT_COLOR_ALPHA,
-              textBrightness = ReaderPreferences.MAX_TEXT_BRIGHTNESS,
-              currentChapterColor = ReaderPreferences.DEFAULT_CURRENT_CHAPTER_COLOR,
-              folderColor = ReaderPreferences.DEFAULT_FOLDER_COLOR,
-              latestColor = ReaderPreferences.DEFAULT_LATEST_COLOR,
-            ),
-          )
-        }
-      }
-    }
-
-    // ---- 控件颜色: 强调色 / 背景 / 按钮 / 目录开关条 ----
-    item(key = "controlColors.toggle") {
-      ExpandButton("控件颜色", controlColorsExpanded, fillWidth = true) {
-        controlColorsExpanded = !controlColorsExpanded
-      }
-    }
-    if (controlColorsExpanded) {
-      item(key = "controlColors.accent.preview") {
-        ColorPreview(
-          label = "强调色示例",
-          rgb = preferences.accentColor,
-          alpha = preferences.accentColorAlpha,
-        )
-      }
-      item(key = "controlColors.accent.channels") {
-        ColorChannelRows(
-          rgb = preferences.accentColor,
-          onRgbChange = { onPreferencesChange(preferences.copy(accentColor = it)) },
-        )
-      }
-      item(key = "controlColors.accent.alpha") {
-        AlphaRow(
-          value = preferences.accentColorAlpha,
-          onChange = { onPreferencesChange(preferences.copy(accentColorAlpha = it)) },
-        )
-      }
-      colorSection("背景色", "controlColors.background", preferences.backgroundColor) {
-        onPreferencesChange(preferences.copy(backgroundColor = it))
-      }
-      colorSection("按钮底色", "controlColors.button", preferences.buttonColor) {
-        onPreferencesChange(preferences.copy(buttonColor = it))
-      }
-      colorSection("目录开关条颜色", "controlColors.menuBar", preferences.menuBarColor) {
-        onPreferencesChange(preferences.copy(menuBarColor = it))
-      }
-      item(key = "controlColors.reset") {
-        ResetButton("控件颜色恢复默认") {
-          onPreferencesChange(
-            preferences.copy(
-              accentColor = ReaderPreferences.DEFAULT_ACCENT_COLOR,
-              accentColorAlpha = ReaderPreferences.DEFAULT_COLOR_ALPHA,
-              backgroundColor = ReaderPreferences.DEFAULT_BACKGROUND_COLOR,
-              buttonColor = ReaderPreferences.DEFAULT_BUTTON_COLOR,
-              menuBarColor = ReaderPreferences.DEFAULT_MENU_BAR_COLOR,
-            ),
-          )
-        }
       }
     }
 
@@ -336,6 +322,7 @@ fun SettingsScreen(
               onClick = { onPreferencesChange(preferences.copy(timeDisplay = mode)) },
               shape = RectangleShape,
               colors = readerButtonColors(),
+              border = readerButtonBorder(),
             ) {
               Text(
                 text = if (selected) "✓ ${mode.label}" else mode.label,
@@ -360,14 +347,56 @@ fun SettingsScreen(
       }
     }
     item {
+      // 总开关放在这里, 和阅读菜单里那个是同一个值: 关掉后根组件直接注销传感器,
+      // 不只是在当前页面不生效.
+      SwitchButton(
+        checked = sensorEnabled,
+        onCheckedChange = onSensorEnabledChange,
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Text(text = "体感手势", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+      }
+    }
+    item {
       // 传感器设置是独立的一份数据, 内容比这一页多得多, 所以单独开一页.
       Button(
         onClick = onOpenSensorSettings,
         modifier = Modifier.fillMaxWidth(),
         shape = RectangleShape,
         colors = readerButtonColors(),
+        border = readerButtonBorder(),
       ) {
         Text(text = "传感器设置", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+      }
+    }
+    item {
+      ListSubHeader {
+        Text(
+          text = "局域网",
+          modifier = Modifier.fillMaxWidth(),
+          textAlign = TextAlign.Center
+        )
+      }
+    }
+    item {
+      // 局域网文件管理的地址 / 端口 / 密码存在 data 目录的 lanip.txt.xlr 里,
+      // 内容不多但需要配着看, 所以单独开一页.
+      Button(
+        onClick = {
+          // 单击这一项才去建 lanip.txt.xlr: 文件不存在就写一份默认的
+          // (地址 192.168.888.888:8888 + key{88888888}); 已存在就原样保留, 不覆盖用户手改的内容.
+          // 用户口径是「单击无线局域网设置时检测存不存在」, 不是 App 启动时建.
+          // 写失败不在这里提示, 下一页 (lanip.kt) 会把失败原因显示出来并记进 log.txt.
+          appendAppLog(context, "点击无线局域网设置")
+          runCatching { ensureLanIpFile(appDataDir(context)) }
+          onOpenLanIp()
+        },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RectangleShape,
+        colors = readerButtonColors(),
+        border = readerButtonBorder(),
+      ) {
+        Text(text = "无线局域网设置", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
       }
     }
     item {
@@ -385,6 +414,7 @@ fun SettingsScreen(
         modifier = Modifier.fillMaxWidth(),
         shape = RectangleShape,
         colors = readerButtonColors(),
+        border = readerButtonBorder(),
       ) {
         Text(text = "数据目录与备份", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
       }
@@ -405,14 +435,15 @@ fun SettingsScreen(
         modifier = Modifier.fillMaxWidth(),
         shape = RectangleShape,
         colors = readerButtonColors(),
+        border = readerButtonBorder(),
       ) {
-        Text(text = "完成", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        Text(text = "返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
       }
     }
   }
 }
 
-/** 主分区按钮: 收起带 ▸, 展开带 ▾. 颜色分组用 [fillWidth] = false 不撑满宽度. */
+/** 主分区按钮: 收起带 ▸, 展开带 ▾. [fillWidth] = false 时按钮只包住文字, 外层居中. */
 @Composable
 private fun ExpandButton(
   text: String,
@@ -433,99 +464,16 @@ private fun ExpandButton(
       modifier = Modifier.fillMaxWidth(),
       shape = RectangleShape,
       colors = readerButtonColors(),
+      border = readerButtonBorder(),
     ) {
       label()
     }
   } else {
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-      Button(onClick = onClick, shape = RectangleShape, colors = readerButtonColors()) {
+      Button(onClick = onClick, shape = RectangleShape, colors = readerButtonColors(), border = readerButtonBorder()) {
         label()
       }
     }
-  }
-}
-
-/** 恢复默认按钮: 宽度不撑满, 只包住文字, 外层居中. */
-@Composable
-private fun ResetButton(text: String, onClick: () -> Unit) {
-  Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-    Button(onClick = onClick, shape = RectangleShape, colors = readerButtonColors()) {
-      Text(text = text, textAlign = TextAlign.Center)
-    }
-  }
-}
-
-/** 颜色预览: 显示当前 RGB 与透明度, 文字本身用这个颜色画. */
-@Composable
-private fun ColorPreview(label: String, rgb: Int, alpha: Int) {
-  Text(
-    text = "#%02X%02X%02X  A%d  %s".format(redOf(rgb), greenOf(rgb), blueOf(rgb), alpha, label),
-    color = rgbColor(rgb, alpha),
-    textAlign = TextAlign.Center,
-    modifier = Modifier.fillMaxWidth(),
-  )
-}
-
-/** 透明度一行: 0..255, 每次走 1. */
-@Composable
-private fun AlphaRow(value: Int, onChange: (Int) -> Unit) {
-  StepRow(
-    label = "透明度",
-    value = value.toString(),
-    onMinus = { onChange(stepAlpha(value, -1)) },
-    onPlus = { onChange(stepAlpha(value, +1)) },
-  )
-}
-
-/** 追加一组「颜色标题 + 预览 + RGB」, 供文字颜色与控件颜色复用. */
-private fun LazyListScope.colorSection(
-  title: String,
-  keyPrefix: String,
-  rgb: Int,
-  onRgbChange: (Int) -> Unit,
-) {
-  item(key = "$keyPrefix.header") {
-    ListSubHeader {
-      Text(
-        text = title,
-        modifier = Modifier.fillMaxWidth(),
-        textAlign = TextAlign.Center
-      )
-    }
-  }
-  item(key = "$keyPrefix.preview") {
-    ColorPreview(label = title, rgb = rgb, alpha = ReaderPreferences.MAX_COLOR_ALPHA)
-  }
-  item(key = "$keyPrefix.channels") {
-    ColorChannelRows(rgb = rgb, onRgbChange = onRgbChange)
-  }
-}
-
-/** R / G / B 三行, 每次走 1 档, 文字色与强调色共用. */
-@Composable
-private fun ColorChannelRows(rgb: Int, onRgbChange: (Int) -> Unit) {
-  val red = redOf(rgb)
-  val green = greenOf(rgb)
-  val blue = blueOf(rgb)
-  Column {
-    StepRow(
-      label = "R",
-      value = red.toString(),
-      onMinus = { onRgbChange(packRgb(stepChannel(red, -1), green, blue)) },
-      onPlus = { onRgbChange(packRgb(stepChannel(red, +1), green, blue)) },
-    )
-    StepRow(
-      label = "G",
-      value = green.toString(),
-      onMinus = { onRgbChange(packRgb(red, stepChannel(green, -1), blue)) },
-      onPlus = { onRgbChange(packRgb(red, stepChannel(green, +1), blue)) },
-    )
-    StepRow(
-      label = "B",
-      value = blue.toString(),
-      onMinus = { onRgbChange(packRgb(red, green, stepChannel(blue, -1))) },
-      onPlus = { onRgbChange(packRgb(red, green, stepChannel(blue, +1))) },
-    )
   }
 }
 

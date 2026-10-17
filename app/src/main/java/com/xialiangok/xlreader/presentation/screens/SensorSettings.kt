@@ -45,11 +45,15 @@ import com.xialiangok.xlreader.data.sensor.TiltRecorder
 import com.xialiangok.xlreader.data.sensor.formatAngle
 import com.xialiangok.xlreader.data.sensor.stepAngleMax
 import com.xialiangok.xlreader.data.sensor.stepAngleMin
+import com.xialiangok.xlreader.data.sensor.stepAutoClickSeconds
 import com.xialiangok.xlreader.data.sensor.stepIntervalMs
 import com.xialiangok.xlreader.data.sensor.stepRestMs
 import com.xialiangok.xlreader.data.sensor.stepSpeed
 import com.xialiangok.xlreader.presentation.theme.ReaderSurface
+import com.xialiangok.xlreader.presentation.theme.readerButtonBorder
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
+import com.xialiangok.xlreader.presentation.theme.readerCardBorder
+import com.xialiangok.xlreader.presentation.theme.readerCardColors
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.seconds
 
@@ -110,6 +114,9 @@ fun SensorSettingsScreen(
                             if (!selected) onChange(settings.copy(multiMode = mode))
                         },
                         modifier = Modifier.fillMaxWidth(),
+                        shape = RectangleShape,
+                        colors = readerCardColors(),
+                        border = readerCardBorder(),
                     ) {
                         Text(
                             text = if (selected) "✓ ${mode.label}" else mode.label,
@@ -184,11 +191,55 @@ fun SensorSettingsScreen(
         item { HintText(REST_HINT) }
 
         item {
+            // 只作用于上下翻页: 翻页停在按钮上后, 等一会儿自动点它.
+            SwitchButton(
+                checked = settings.autoClick,
+                onCheckedChange = { onChange(settings.copy(autoClick = it)) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("上下翻页自动单击", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            }
+        }
+        if (settings.autoClick) {
+            item {
+                // 用户口径: 默认 3 秒, 范围 0 ~ 无限, 每挡 1 秒; 0 表示翻页一停就点.
+                NumberStepRow(
+                    label = "自动单击等待（秒）",
+                    value = settings.autoClickDelaySeconds,
+                    inputRange = SensorSettings.MIN_AUTO_CLICK_SECONDS..SensorSettings.MAX_AUTO_CLICK_SECONDS,
+                    onValueChange = { onChange(settings.copy(autoClickDelaySeconds = it)) },
+                    onMinus = {
+                        onChange(
+                            settings.copy(
+                                autoClickDelaySeconds = stepAutoClickSeconds(
+                                    settings.autoClickDelaySeconds,
+                                    -1,
+                                ),
+                            ),
+                        )
+                    },
+                    onPlus = {
+                        onChange(
+                            settings.copy(
+                                autoClickDelaySeconds = stepAutoClickSeconds(
+                                    settings.autoClickDelaySeconds,
+                                    +1,
+                                ),
+                            ),
+                        )
+                    },
+                )
+            }
+            item { HintText(AUTO_CLICK_HINT) }
+        }
+
+        item {
             Button(
                 onClick = onOpenPages,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text(text = "启用页面（${settings.pages.size}/${GesturePage.entries.size}）", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -200,6 +251,7 @@ fun SensorSettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("新增手势", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -221,7 +273,13 @@ fun SensorSettingsScreen(
         settings.gestures.forEach { gesture ->
             item {
                 // 点进详情：改名、换动作、改速度、重录、删除。
-                Card(onClick = { onOpenGesture(gesture.id) }, modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    onClick = { onOpenGesture(gesture.id) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RectangleShape,
+                    colors = readerCardColors(),
+                    border = readerCardBorder(),
+                ) {
                     Text(
                         text = gesture.name,
                         style = MaterialTheme.typography.titleSmall,
@@ -284,6 +342,7 @@ fun SensorSettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape=RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("完成", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -340,6 +399,7 @@ fun SensorPagesScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape=RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("完成", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -399,6 +459,9 @@ fun SensorGestureDetailScreen(
                         if (!selected) onChange(gesture.copy(action = action))
                     },
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RectangleShape,
+                    colors = readerCardColors(),
+                    border = readerCardBorder(),
                 ) {
                     Text(
                         text = if (selected) "✓ ${action.label}" else action.label,
@@ -505,6 +568,7 @@ fun SensorGestureDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("重新录制", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -517,6 +581,7 @@ fun SensorGestureDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("删除这个手势", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -527,6 +592,7 @@ fun SensorGestureDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("完成", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -683,6 +749,7 @@ fun SensorGestureRecordScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RectangleShape,
                     colors = readerButtonColors(),
+                    border = readerButtonBorder(),
                 ) {
                     Text("重试", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
@@ -695,6 +762,7 @@ fun SensorGestureRecordScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("取消", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -743,7 +811,9 @@ fun SensorPermissionScreen(
             Button(
                 onClick = onOpenSettings,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("去系统设置查看", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -752,7 +822,9 @@ fun SensorPermissionScreen(
             Button(
                 onClick = onRecheck,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("已授权，重新检查", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -761,7 +833,9 @@ fun SensorPermissionScreen(
             Button(
                 onClick = onBack,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("返回设置", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -803,6 +877,12 @@ private const val REST_HINT =
         "歇够这段时间再按检测间隔继续；0 表示不休息。" +
         "到 5 分钟（300000）再按 ＋ 就是 -1，即触发一次后停止后续检测" +
         "（离开 / 重进页面或改动设置后恢复）。"
+
+private const val AUTO_CLICK_HINT =
+    "上下翻页停在按钮上会显示选中边框；等待时间内没有再次翻页，就自动单击这个按钮，" +
+        "期间再次翻页会取消本次单击。只对按钮生效，正文内容不参与选中。" +
+        "横排有多个按钮时，上翻页选左边、下翻页选右边。" +
+        "0 秒表示一停就单击（输入上限为 2147483647 秒，即「无限」）。"
 
 private const val RECORD_HINT =
     "提示：新增手势时先倒计时 3 秒，再在 10 秒内把表摆成要用的姿势；" +

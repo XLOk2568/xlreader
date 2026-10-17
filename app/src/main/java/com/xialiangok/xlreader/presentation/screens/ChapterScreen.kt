@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -33,6 +34,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
@@ -46,6 +49,7 @@ import com.xialiangok.xlreader.presentation.BindGestureActions
 import com.xialiangok.xlreader.presentation.findActivity
 import com.xialiangok.xlreader.presentation.scrollByDp
 import com.xialiangok.xlreader.presentation.theme.ReadingMetrics
+import com.xialiangok.xlreader.presentation.theme.readerButtonBorder
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -104,6 +108,10 @@ private sealed interface ImageState {
  * @param menuGestureEnabled 阅读菜单里要不要跑体感光标导航，由「启用页面」里的
  *   **正文阅读(菜单)** 那一页决定：没勾上时菜单开着既不显示选中光标、也不接管体感手势，
  *   只靠手指操作（连检测任务都不注册，一个采样点都不收）
+ * @param sensorEnabled 体感手势总开关的当前值, 阅读菜单里可以直接拨.
+ * @param onSensorEnabledChange 拨动总开关后回写体感设置.
+ * @param autoClick 上下翻页自动单击开关.
+ * @param autoClickDelaySeconds 翻页停下后等多少秒自动单击 (0 = 立即).
  */
 @Composable
 fun ChapterScreen(
@@ -120,6 +128,10 @@ fun ChapterScreen(
     menuVisible: Boolean,
     onMenuVisibleChange: (Boolean) -> Unit,
     menuGestureEnabled: Boolean,
+    sensorEnabled: Boolean,
+    onSensorEnabledChange: (Boolean) -> Unit,
+    autoClick: Boolean,
+    autoClickDelaySeconds: Int,
 ) {
     val view = LocalView.current
     DisposableEffect(preferences.keepScreenOn) {
@@ -191,6 +203,10 @@ fun ChapterScreen(
             menuVisible = menuVisible,
             onMenuVisibleChange = onMenuVisibleChange,
             menuGestureEnabled = menuGestureEnabled,
+            sensorEnabled = sensorEnabled,
+            onSensorEnabledChange = onSensorEnabledChange,
+            autoClick = autoClick,
+            autoClickDelaySeconds = autoClickDelaySeconds,
         )
     }
 }
@@ -240,13 +256,120 @@ private fun ChapterBody(
     menuVisible: Boolean,
     onMenuVisibleChange: (Boolean) -> Unit,
     menuGestureEnabled: Boolean,
+    sensorEnabled: Boolean,
+    onSensorEnabledChange: (Boolean) -> Unit,
+    autoClick: Boolean,
+    autoClickDelaySeconds: Int,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    // 用它挡住「息屏 / 退到后台后才到点」的自动单击.
+    val lifecycleOwner = LocalContext.current.findActivity() as? LifecycleOwner
+
+    val hasPrevious = chapterIndex > 0
+    val hasNext = chapterIndex < book.chapterCount - 1
+
+    // 上下翻页自动单击: 正文内容不参与选中, 只选底部这几个按钮.
+    // 光标用 (行, 行内下标) 表示: 第一行是横排的上一章/下一章 (可能为空, 于是被滤掉),
+    // 后面两行各是一个整行按钮.
+    val controlRows = remember(hasPrevious, hasNext) {
+        buildList {
+            val chapterRow = buildList {
+                if (hasPrevious) add(BodyControl.Previous)
+                if (hasNext) add(BodyControl.Next)
+            }
+            if (chapterRow.isNotEmpty()) add(chapterRow)
+            add(listOf(BodyControl.Catalog))
+            add(listOf(BodyControl.Back))
+        }
+    }
+    val catalogRow = controlRows.indexOfFirst { BodyControl.Catalog in it }
+    val backRow = controlRows.indexOfFirst { BodyControl.Back in it }
+    var controlRow by remember(chapterIndex) { mutableIntStateOf(0) }
+    var controlIndex by remember(chapterIndex) { mutableIntStateOf(0) }
+    var selectingControl by remember(chapterIndex) { mutableStateOf(false) }
+    var autoClickTick by remember { mutableIntStateOf(0) }
+
+    fun performControl(control: BodyControl) {
+        when (control) {
+            BodyControl.Previous -> {
+                onSaveProgress()
+                onOpenChapter(chapterIndex - 1)
+            }
+
+            BodyControl.Next -> {
+                onSaveProgress()
+                onOpenChapter(chapterIndex + 1)
+            }
+
+            BodyControl.Catalog -> onOpenCatalog()
+            BodyControl.Back -> onBackToFileList()
+        }
+    }
+
+    /**
+     * 选中框在底部按钮之间挪一次: 先在这一行的横排按钮里走 (上翻页向左, 下翻页向右),
+     * 走到行头/行尾再换到相邻行; 在第一个按钮上再往上就离开按钮区, 回到正常翻页.
+     */
+    fun moveControl(down: Boolean) {
+        // 每次翻页都重新计时, 哪怕已经到了最后一个按钮没得挪: 用户又翻了一下,
+        // 就说明还想继续翻, 不该在这时候自动点下去.
+        autoClickTick += 1
+        val row = controlRows[controlRow]
+        if (down) {
+            if (controlIndex < row.lastIndex) {
+                controlIndex += 1
+            } else if (controlRow < controlRows.lastIndex) {
+                controlRow += 1
+                controlIndex = controlRows[controlRow].lastIndex
+            } else {
+                return
+            }
+        } else {
+            if (controlIndex > 0) {
+                controlIndex -= 1
+            } else if (controlRow > 0) {
+                controlRow -= 1
+                controlIndex = 0
+            } else {
+                selectingControl = false
+                return
+            }
+        }
+    }
+
+    // 自动单击: 翻页停在按钮上后开始倒计时, 再次翻页会重新计时 (= 取消上一次单击).
+    LaunchedEffect(
+        autoClick,
+        autoClickDelaySeconds,
+        selectingControl,
+        controlRow,
+        controlIndex,
+        autoClickTick,
+    ) {
+        if (!autoClick || !selectingControl) return@LaunchedEffect
+        delay(autoClickDelaySeconds * 1000L)
+        // 等待期间息屏 / 退到后台就不该再替用户点: 他看不见, 动作也不该发生.
+        if (lifecycleOwner?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != true) {
+            return@LaunchedEffect
+        }
+        val control = controlRows.getOrNull(controlRow)?.getOrNull(controlIndex)
+            ?: return@LaunchedEffect
+        // 先撤掉选中再点, 免得点击引起的重组又点一次.
+        selectingControl = false
+        performControl(control)
+    }
+
+    // 手指在正文里滑动时, 按钮可能被滑出屏幕: 选中框跟着离开, 就别再等自动单击了.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (scrolling) selectingControl = false
+        }
+    }
 
     // 体感手势：单击 = 弹出 / 收起快捷菜单（和手指单击正文一样），返回 = 退回文件列表，
-    // 翻页 = 按像素（dp）滚动
+    // 翻页 = 按像素（dp）滚动；开了自动单击后, 翻页滚到底就改为在底部按钮间挪选中框
     //
     // 菜单开着时**不登记**，由菜单自己接管（见 [ReaderMenuOverlay]）：否则菜单铺满整屏，
     // 翻页手势却滚到底下的正文上、单击又会把菜单直接关掉；整个手势容器只有一个「当前页」，
@@ -255,11 +378,35 @@ private fun ChapterBody(
     if (!menuVisible) {
         BindGestureActions(
             onTap = {
+                selectingControl = false
                 onMenuVisibleChange(!menuVisible)
                 onSaveProgress()
             },
             onBack = onBackToFileList,
-            onScrollBy = { delta -> scope.launch { scrollByDp(listState, delta, density) } },
+            onScrollBy = { delta ->
+                when {
+                    !autoClick -> scope.launch { scrollByDp(listState, delta, density) }
+
+                    selectingControl -> {
+                        // 选中框已经在按钮上: 翻页只在按钮之间走. 若这一下往上离开了按钮区,
+                        // 就顺手把这次翻页还给正文.
+                        moveControl(delta > 0)
+                        if (!selectingControl) scope.launch { scrollByDp(listState, delta, density) }
+                    }
+
+                    // 往下的翻页已经滚到头了: 进入按钮选中, 落到第一行最右边 (下翻页选右方).
+                    delta > 0 &&
+                        listState.layoutInfo.totalItemsCount > 0 &&
+                        !listState.canScrollForward -> {
+                        selectingControl = true
+                        controlRow = 0
+                        controlIndex = controlRows[0].lastIndex
+                        autoClickTick += 1
+                    }
+
+                    else -> scope.launch { scrollByDp(listState, delta, density) }
+                }
+            },
         )
     }
 
@@ -297,9 +444,6 @@ private fun ChapterBody(
         Color(0xFF000000.toInt() or preferences.effectiveTextColor)
     }
 
-    val hasPrevious = chapterIndex > 0
-    val hasNext = chapterIndex < book.chapterCount - 1
-
     Box(modifier = Modifier.fillMaxSize()) {
         WearListScreen(
             // 阅读界面不要时间，顶部空间留给正文
@@ -310,6 +454,7 @@ private fun ChapterBody(
             // 单击正文：弹出菜单，顺手记一次进度（滚动不写盘，所以这里是个便宜的记录点）
             // 菜单打开后铺满整屏、单击由菜单自己消费，走不到这里，所以「打开」只会记一次
             onTap = {
+                selectingControl = false
                 onMenuVisibleChange(!menuVisible)
                 onSaveProgress()
             },
@@ -395,12 +540,18 @@ private fun ChapterBody(
                     if (hasPrevious) {
                         Button(
                             onClick = {
-                                onSaveProgress()
-                                onOpenChapter(chapterIndex - 1)
+                                selectingControl = false
+                                performControl(BodyControl.Previous)
                             },
-                            modifier = if (hasNext) Modifier.weight(1f) else Modifier.fillMaxWidth(),
+                            modifier = (if (hasNext) Modifier.weight(1f) else Modifier.fillMaxWidth())
+                                .selectionBorder(
+                                    selectingControl &&
+                                        controlRow == 0 &&
+                                        controlIndex == controlRows[0].indexOf(BodyControl.Previous),
+                                ),
                             shape = RectangleShape,          // 直角
                             colors = readerButtonColors(),
+                            border = readerButtonBorder(),
                         ) {
                             Text(text="上一章", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
                         }
@@ -408,12 +559,18 @@ private fun ChapterBody(
                     if (hasNext) {
                         Button(
                             onClick = {
-                                onSaveProgress()
-                                onOpenChapter(chapterIndex + 1)
+                                selectingControl = false
+                                performControl(BodyControl.Next)
                             },
-                            modifier = if (hasPrevious) Modifier.weight(1f) else Modifier.fillMaxWidth(),
+                            modifier = (if (hasPrevious) Modifier.weight(1f) else Modifier.fillMaxWidth())
+                                .selectionBorder(
+                                    selectingControl &&
+                                        controlRow == 0 &&
+                                        controlIndex == controlRows[0].indexOf(BodyControl.Next),
+                                ),
                             shape = RectangleShape,          // 直角
                             colors = readerButtonColors(),
+                            border = readerButtonBorder(),
                         ) {
                             Text(text="下一章", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
                         }
@@ -422,20 +579,32 @@ private fun ChapterBody(
             }
             item {
                 Button(
-                    onClick = onOpenCatalog,
-                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        selectingControl = false
+                        performControl(BodyControl.Catalog)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectionBorder(selectingControl && controlRow == catalogRow && controlIndex == 0),
                     shape = RectangleShape,          // 直角
                     colors = readerButtonColors(),
+                    border = readerButtonBorder(),
                 ) {
                     Text(text = "打开目录", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
             item {
                 Button(
-                    onClick = onBackToFileList,
-                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        selectingControl = false
+                        performControl(BodyControl.Back)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectionBorder(selectingControl && controlRow == backRow && controlIndex == 0),
                     shape = RectangleShape,          // 直角
                     colors = readerButtonColors(),
+                    border = readerButtonBorder(),
                 ) {
                     Text(text = "返回文件列表", textAlign =TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
@@ -462,6 +631,10 @@ private fun ChapterBody(
                 },
                 onDismiss = { onMenuVisibleChange(false) },
                 gestureEnabled = menuGestureEnabled,
+                sensorEnabled = sensorEnabled,
+                onSensorEnabledChange = onSensorEnabledChange,
+                autoClick = autoClick,
+                autoClickDelaySeconds = autoClickDelaySeconds,
             )
         }
     }
@@ -545,4 +718,12 @@ private fun decodeSampled(file: File, maxSize: Int): Bitmap? {
 
     val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
     return BitmapFactory.decodeFile(file.absolutePath, options)
+}
+
+/** 正文页底部的按钮; 上下翻页的自动单击只在这些按钮之间选, 正文内容不参与. */
+private enum class BodyControl {
+    Previous,
+    Next,
+    Catalog,
+    Back,
 }

@@ -30,7 +30,7 @@ enum class GestureAction(val label: String) {
     val hasSpeed: Boolean get() = this == ScrollDown || this == ScrollUp
 }
 
-/** 手势可以生效的页面（按用户口径只列内容页）。 */
+/** 手势可以生效的页面。 */
 enum class GesturePage(val label: String) {
     FileList("文件列表"),
     Catalog("章节目录"),
@@ -44,6 +44,18 @@ enum class GesturePage(val label: String) {
      * 只靠手指操作，一个采样点都不收（见 [com.xialiangok.xlreader.presentation.screens.ReaderMenuOverlay]）。
      */
     ReaderMenu("正文阅读(菜单)"),
+
+    /** 设置页. 长列表靠体感翻页, 返回就是回上一页. */
+    Settings("设置"),
+
+    /** 关于页. */
+    About("关于"),
+
+    /** epub 已有解压缓存时的询问页 (直接阅读 / 更新缓存 / 取消). */
+    CachePrompt("解压缓存询问"),
+
+    /** 局域网文件管理页. 返回等于关掉这一页 (服务跟着停). */
+    LanFileManager("局域网文件管理"),
 }
 
 /**
@@ -114,6 +126,9 @@ data class SensorGesture(
  * @param multiGesture 多个手势同时命中时是否全部执行。**默认关**：只跑列表里第一个命中的，
  *   这也是一直以来的行为。
  * @param multiMode 多手势的执行方式（[multiGesture] 打开后生效）。
+ * @param autoClick 上下翻页的自动单击。打开后, 翻页停在按钮上会显示选中边框,
+ *   等待 [autoClickDelaySeconds] 秒没有再次翻页就自动单击这个按钮.
+ * @param autoClickDelaySeconds 自动单击的等待秒数 (0 = 立即单击, 每挡 1 秒, 上限无穷).
  */
 @Immutable
 data class SensorSettings(
@@ -124,6 +139,8 @@ data class SensorSettings(
     val gestures: List<SensorGesture> = emptyList(),
     val multiGesture: Boolean = false,
     val multiMode: MultiGestureMode = MultiGestureMode.Simultaneous,
+    val autoClick: Boolean = false,
+    val autoClickDelaySeconds: Int = DEFAULT_AUTO_CLICK_SECONDS,
 ) {
     /**
      * 某个页面此刻真正要检测的手势。
@@ -156,6 +173,11 @@ data class SensorSettings(
          * **触发一次后彻底停止后续检测**（换页 / 改动设置才会重新开始）。
          */
         const val REST_STOP_MS = -1
+
+        /** 自动单击等待秒数: 0 表示立即单击, 往上不设限 (每挡 1 秒). */
+        const val MIN_AUTO_CLICK_SECONDS = 0
+        const val MAX_AUTO_CLICK_SECONDS = Int.MAX_VALUE
+        const val DEFAULT_AUTO_CLICK_SECONDS = 3
 
         /** 录制流程：先倒计时 3 秒，再在 10 秒内最多采 200 个点。 */
         const val COUNTDOWN_SECONDS = 3
@@ -266,6 +288,15 @@ fun stepRestMs(ms: Int, delta: Int): Int {
     if (next > SensorSettings.MAX_REST_MS) return SensorSettings.REST_STOP_MS
     return next.coerceIn(SensorSettings.MIN_REST_MS, SensorSettings.MAX_REST_MS)
 }
+
+/** 自动单击等待秒数走一步 (±1 秒), 夹在 0 与「无穷」之间. */
+fun stepAutoClickSeconds(seconds: Int, delta: Int): Int =
+    (seconds.toLong() + delta)
+        .coerceIn(
+            SensorSettings.MIN_AUTO_CLICK_SECONDS.toLong(),
+            SensorSettings.MAX_AUTO_CLICK_SECONDS.toLong(),
+        )
+        .toInt()
 
 /** 翻页速度走一步（±1 dp），夹在合法范围内（下限 2，上限等于没有）。 */
 fun stepSpeed(speed: Int, delta: Int): Int =

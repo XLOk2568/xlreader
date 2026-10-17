@@ -9,6 +9,7 @@ import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
+import com.xialiangok.xlreader.presentation.theme.readerButtonBorder
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
 
 /**
@@ -37,7 +38,7 @@ fun NoticeScreen(
         if (onAction != null) {
             item { ControlSpacer() }
             item {
-                Button(onClick = onAction, modifier = Modifier.fillMaxWidth(), shape = RectangleShape,colors = readerButtonColors()) {
+                Button(onClick = onAction, modifier = Modifier.fillMaxWidth(), shape = RectangleShape,colors = readerButtonColors(), border = readerButtonBorder()) {
                     Text(actionLabel, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }

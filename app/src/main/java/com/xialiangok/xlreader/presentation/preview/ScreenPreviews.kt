@@ -59,11 +59,13 @@ fun HomeScreenPreview() {
             onAutoLocated = {},
             onOpenDirectory = {},
             onOpenBook = {},
+            onOpenTextFile = {},
             onNavigateUp = {},
             onOpenSettings = {},
             onOpenAbout = {},
             onExitApp = {},
             onOpenLanFileManager = {},
+            onOpenDataAdmin = {},
             onFilesChanged = {},
         )
     }
@@ -123,6 +125,10 @@ fun ChapterScreenPreview() {
             menuVisible = false,
             onMenuVisibleChange = {},
             menuGestureEnabled = false,
+            sensorEnabled = true,
+            onSensorEnabledChange = {},
+            autoClick = false,
+            autoClickDelaySeconds = SensorSettings.DEFAULT_AUTO_CLICK_SECONDS,
         )
     }
 }
@@ -140,6 +146,10 @@ fun ReaderMenuPreview() {
             onDismiss = {},
             // 预览里开着光标导航，这样能直接看到选中控件的紫色边框。
             gestureEnabled = true,
+            sensorEnabled = true,
+            onSensorEnabledChange = {},
+            autoClick = false,
+            autoClickDelaySeconds = SensorSettings.DEFAULT_AUTO_CLICK_SECONDS,
         )
     }
 }
@@ -151,8 +161,12 @@ fun SettingsScreenPreview() {
         SettingsScreen(
             preferences = ReaderPreferences(),
             onPreferencesChange = {},
+            sensorEnabled = true,
+            onSensorEnabledChange = {},
             onOpenSensorSettings = {},
+            onOpenLanIp = {},
             onOpenDataAdmin = {},
+            onOpenTheme = {},
             onBack = {},
         )
     }

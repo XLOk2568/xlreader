@@ -2,6 +2,7 @@ package com.xialiangok.xlreader.presentation.theme
 
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.snap
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -16,12 +17,13 @@ import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.LocalReduceMotion
 import androidx.wear.compose.material3.ButtonColors
 import androidx.wear.compose.material3.ButtonDefaults
+import androidx.wear.compose.material3.CardColors
+import androidx.wear.compose.material3.CardDefaults
 import androidx.wear.compose.material3.ColorScheme
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.MotionScheme
 import androidx.wear.compose.material3.Typography
 import com.xialiangok.xlreader.data.ReaderPreferences
-import com.xialiangok.xlreader.data.packArgb
 
 /*
  * 配色刻意做得“低视觉负担”:
@@ -82,41 +84,56 @@ val ReaderColorScheme = ColorScheme(
 val LocalReaderPreferences = staticCompositionLocalOf { ReaderPreferences() }
 
 /**
- * 把 `0xRRGGBB` + 透明度转成 Compose 颜色.
+ * 把 `0xRRGGBB` 转成不透明的 Compose 颜色.
  */
-fun rgbColor(rgb: Int, alpha: Int = ReaderPreferences.MAX_COLOR_ALPHA): Color =
-    Color(packArgb(rgb, alpha))
+fun rgbColor(rgb: Int): Color = Color(0xFF000000.toInt() or (rgb and 0xFFFFFF))
 
 /**
  * 按用户设置拼一套配色.
  *
- * onSurface / onSurfaceVariant 换成用户选的字色与压暗一档的次要色,
- * 于是绝大多数控件文字自动跟随设置, 而文件夹橙, 最近打开紫这些写死的颜色保持原样.
- * primary 用于开关, 进度, 标签这类强调元素, 由强调色设置决定.
+ * onSurface / onSurfaceVariant 换成主题里的正文色与压暗一档的次要色,
+ * 于是绝大多数控件文字自动跟随设置; 边缘色 (按钮描边) 与文件名色由各自控件直接读.
+ * primary 用于开关, 进度, 标签这类强调元素, 由主题的信息色决定;
+ * 当前章节 / 最近打开 / 目录开关条也都读同一个信息色 (2026-10-31 合并).
  */
 fun readerColorScheme(preferences: ReaderPreferences): ColorScheme {
-    val text = rgbColor(preferences.effectiveTextColor, preferences.textColorAlpha)
-    val secondary = rgbColor(preferences.effectiveSecondaryTextColor, preferences.textColorAlpha)
-    val accent = rgbColor(preferences.effectiveAccentColor, preferences.accentColorAlpha)
+    val text = rgbColor(preferences.effectiveTextColor)
+    val secondary = rgbColor(preferences.effectiveSecondaryTextColor)
+    val accent = rgbColor(preferences.effectiveAccentColor)
     return ReaderColorScheme.copy(
         primary = accent,
         tertiary = accent,
         onSurface = text,
         onSurfaceVariant = secondary,
         onBackground = text,
-        background = rgbColor(preferences.backgroundColor),
+        background = rgbColor(preferences.effectiveBackgroundColor),
     )
 }
 
-/**
- * 按钮底色: 统一取设置里的按钮色.
- */
-@Composable
-fun readerButtonContainerColor(): Color =
-    rgbColor(LocalReaderPreferences.current.buttonColor)
+/** 按钮与列表项的描边粗细. 1dp 在手表屏上就是两个像素, 够看清又不会抢眼. */
+private val ReaderOutlineWidth = 1.dp
 
 /**
- * 全应用统一的按钮配色: 底色取设置里的按钮色.
+ * 按钮底色.
+ *
+ * 2026-10-31 起统一为**纯黑**: 按钮不再靠一块灰底和背景区分, 只留一圈描边,
+ * 这样按钮、列表项、页面背景都是同一种黑, AMOLED 上整屏只有文字和边框在发光.
+ */
+@Composable
+fun readerButtonContainerColor(): Color = ReaderBlack
+
+/**
+ * 按钮与列表项的描边颜色: 取设置里的按钮色.
+ *
+ * 原来按钮是把按钮色铺满整个底面, 现在底面改成纯黑, 按钮色降级成那一圈边框,
+ * 于是「按钮色」这个设置项仍然管着所有按钮和列表项的外观.
+ */
+@Composable
+fun readerButtonBorder(): BorderStroke =
+    BorderStroke(ReaderOutlineWidth, rgbColor(LocalReaderPreferences.current.effectiveButtonColor))
+
+/**
+ * 全应用统一的按钮配色: 纯黑底 + 主题文字色.
  *
  * 注意**必须同时指定文字色**: Wear 默认按钮的文字色取自 `onPrimary`,
  * 而本主题里 `onPrimary` 是纯黑, 只改底色的话字就看不见了, 所以这里配 `onSurface`.
@@ -126,6 +143,22 @@ fun readerButtonColors(): ButtonColors = ButtonDefaults.buttonColors(
     containerColor = readerButtonContainerColor(),
     contentColor = MaterialTheme.colorScheme.onSurface,
 )
+
+/**
+ * 列表项 (Card) 的配色: 与按钮一样的纯黑底.
+ *
+ * 列表项原来用 `surfaceContainer` (比背景亮一档的灰), 和按钮的按钮色对不上;
+ * 现在两者都改纯黑, 只靠边框区分, 颜色由 [readerCardBorder] 统一给出.
+ */
+@Composable
+fun readerCardColors(): CardColors = CardDefaults.cardColors(
+    containerColor = ReaderBlack,
+    contentColor = MaterialTheme.colorScheme.onSurface,
+)
+
+/** 列表项描边: 与按钮同一条边、同一种颜色. */
+@Composable
+fun readerCardBorder(): BorderStroke = readerButtonBorder()
 
 /**
  * 应用主题.
@@ -155,14 +188,9 @@ fun XlReaderTheme(
             small = preferences.smallFontSize,
         )
     }
-    val colorScheme = remember(
-        preferences.textColor,
-        preferences.textColorAlpha,
-        preferences.textBrightness,
-        preferences.accentColor,
-        preferences.accentColorAlpha,
-        preferences.backgroundColor,
-    ) {
+    // 颜色现在全部来自主题 (含每项的「亮度跟随」开关), 直接按整份偏好算,
+    // 免得漏掉某个 follow 字段导致改主题后颜色不刷新.
+    val colorScheme = remember(preferences) {
         readerColorScheme(preferences)
     }
     CompositionLocalProvider(

@@ -35,7 +35,10 @@ import com.xialiangok.xlreader.data.file.exportSettings
 import com.xialiangok.xlreader.data.file.formatSize
 import com.xialiangok.xlreader.data.file.importSettings
 import com.xialiangok.xlreader.data.file.listDataDirectory
+import com.xialiangok.xlreader.presentation.theme.readerButtonBorder
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
+import com.xialiangok.xlreader.presentation.theme.readerCardBorder
+import com.xialiangok.xlreader.presentation.theme.readerCardColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -54,6 +57,7 @@ import java.io.File
 fun SettingsDataAdminScreen(
     dataDirPath: String,
     onOpenImport: () -> Unit,
+    onOpenTextFile: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -72,6 +76,8 @@ fun SettingsDataAdminScreen(
     // 删除 / 粘贴之后 +1，让列表重新读一遍磁盘。
     var revision by remember { mutableIntStateOf(0) }
     var exporting by remember { mutableStateOf(false) }
+    /** 点了 .txt / .xlr 之后弹出「直接阅读 / 使用插件」选择框的那个文件. */
+    var choosingTextFile by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(dirPath, revision) {
         loading = true
@@ -134,6 +140,7 @@ fun SettingsDataAdminScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RectangleShape,
                     colors = readerButtonColors(),
+                    border = readerButtonBorder(),
                 ) {
                     Text("上一级", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
@@ -162,9 +169,14 @@ fun SettingsDataAdminScreen(
                     } else {
                         // 再点一下取消选中，免得误删。
                         selected = if (isSelected) null else entry.path
+                        // 文本文件顺带问一句要不要直接看: 选中状态保留, 关掉选择框照样能删 / 复制.
+                        if (!isSelected && isPlainTextFile(entry.name)) choosingTextFile = entry.path
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,
+                colors = readerCardColors(),
+                border = readerCardBorder(),
             ) {
                 Text(
                     text = if (isSelected) "✓ ${entry.name}" else entry.name,
@@ -212,6 +224,7 @@ fun SettingsDataAdminScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("复制", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -233,6 +246,7 @@ fun SettingsDataAdminScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text(if (clipboard == null) "粘贴" else "粘贴 ${File(clipboard!!).name}", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -251,6 +265,7 @@ fun SettingsDataAdminScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("删除", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -274,6 +289,7 @@ fun SettingsDataAdminScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("导出设置", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -284,6 +300,7 @@ fun SettingsDataAdminScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("导入设置", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -296,6 +313,7 @@ fun SettingsDataAdminScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -332,6 +350,7 @@ fun SettingsDataAdminScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RectangleShape,
                     colors = readerButtonColors(),
+                    border = readerButtonBorder(),
                 ) {
                     Text("app storage", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
@@ -346,11 +365,25 @@ fun SettingsDataAdminScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RectangleShape,
                     colors = readerButtonColors(),
+                    border = readerButtonBorder(),
                 ) {
                     Text("internal storage", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
+    }
+
+    // .txt / .xlr: 选中之后顺带问一句「直接阅读 / 使用插件」, 插件那一项现在是空的.
+    val textFile = choosingTextFile
+    if (textFile != null) {
+        TextFileOpenDialog(
+            fileName = File(textFile).name,
+            onRead = {
+                choosingTextFile = null
+                onOpenTextFile(textFile)
+            },
+            onDismiss = { choosingTextFile = null },
+        )
     }
 }
 
@@ -437,6 +470,9 @@ fun SettingsImportScreen(
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
+                shape = RectangleShape,
+                colors = readerCardColors(),
+                border = readerCardBorder(),
             ) {
                 Text(
                     text = entry.name,
@@ -461,6 +497,7 @@ fun SettingsImportScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RectangleShape,
                 colors = readerButtonColors(),
+                border = readerButtonBorder(),
             ) {
                 Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }

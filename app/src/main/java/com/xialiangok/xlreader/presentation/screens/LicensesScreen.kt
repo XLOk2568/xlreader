@@ -2,11 +2,11 @@ package com.xialiangok.xlreader.presentation.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,7 +21,10 @@ import androidx.wear.compose.material3.Text
 import com.xialiangok.xlreader.data.BUILD_REFERENCE_NOTE
 import com.xialiangok.xlreader.data.OpenSourceProject
 import com.xialiangok.xlreader.data.bundledOpenSourceProjects
+import com.xialiangok.xlreader.presentation.theme.ReaderBlack
+import com.xialiangok.xlreader.presentation.theme.readerButtonBorder
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
+import com.xialiangok.xlreader.presentation.theme.readerCardBorder
 
 /**
  * 开源许可页：列出随应用一同分发的开源项目。
@@ -86,7 +89,7 @@ fun LicensesScreen(onBack: () -> Unit) {
 
         item { ControlSpacer() }
         item {
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape = RectangleShape,colors = readerButtonColors()) {
+            Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape = RectangleShape,colors = readerButtonColors(), border = readerButtonBorder()) {
                 Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
@@ -97,15 +100,17 @@ fun LicensesScreen(onBack: () -> Unit) {
  * 一条开源项目。
  *
  * 这里没有用 Wear 的 `Card`：该版本里 `Card` 的两个重载都强制要求 `onClick`，
- * 而许可条目是只读信息、不该出现点击涟漪，所以用带圆角底色的 Column 自绘。
+ * 而许可条目是只读信息、不该出现点击涟漪，所以用带底色的 Column 自绘。
+ * 自绘也得跟列表项保持一致: 纯黑底 + 按钮色描边 + 直角 (2026-10-31 起的统一口径).
  */
 @Composable
 private fun LicenseCard(project: OpenSourceProject) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clip(RectangleShape)
+            .background(ReaderBlack)
+            .border(readerCardBorder(), RectangleShape)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Text(

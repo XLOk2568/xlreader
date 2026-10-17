@@ -1,6 +1,7 @@
 package com.xialiangok.xlreader.presentation.screens
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -8,6 +9,7 @@ import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
+import com.xialiangok.xlreader.presentation.theme.readerButtonBorder
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
 
 /**
@@ -46,12 +48,12 @@ fun PermissionScreen(
 
         item { ControlSpacer() }
         item {
-            Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
+            Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors(), border = readerButtonBorder()) {
                 Text("去系统设置授权", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
-            Button(onClick = onRecheck, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
+            Button(onClick = onRecheck, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors(), border = readerButtonBorder()) {
                 Text("已授权，重新检查", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }

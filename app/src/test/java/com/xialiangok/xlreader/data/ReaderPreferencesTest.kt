@@ -115,11 +115,12 @@ class ReaderPreferencesTest {
     fun `defaults match the theme`() {
         val defaults = ReaderPreferences()
 
-        assertEquals(0xE4E4E4, defaults.textColor)
-        assertEquals(1f, defaults.textBrightness)
+        assertEquals(0xFADC64, defaults.textColor)
+        assertEquals(0.9f, defaults.textBrightness)
         assertEquals(ReaderPreferences.BRIGHTNESS_SYSTEM, defaults.screenBrightness)
-        assertEquals(0xE4E4E4, defaults.effectiveTextColor)
-        // 默认 16 磅，也就是原来「中」那一档
-        assertEquals(ReaderPreferences.DEFAULT_FONT_SIZE, defaults.fontSize)
+        // 250/220/100 各乘 90% 后取整
+        assertEquals(0xE1C65A, defaults.effectiveTextColor)
+        // 默认 19 磅
+        assertEquals(19, defaults.fontSize)
     }
 }

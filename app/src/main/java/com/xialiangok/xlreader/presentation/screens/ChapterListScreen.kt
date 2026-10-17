@@ -38,7 +38,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.xialiangok.xlreader.presentation.theme.LocalReaderPreferences
+import com.xialiangok.xlreader.presentation.theme.readerButtonBorder
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
+import com.xialiangok.xlreader.presentation.theme.readerCardBorder
+import com.xialiangok.xlreader.presentation.theme.readerCardColors
 import com.xialiangok.xlreader.presentation.theme.rgbColor
 
 /** 列表项的 key：靠它把「屏幕上正中央的那一项」反查回具体章节。 */
@@ -83,7 +86,7 @@ fun ChapterListScreen(
 
     // 当前章颜色与顶上紫条颜色都跟着设置走, 页面本身不再写死色值.
     val prefs = LocalReaderPreferences.current
-    val currentChapterColor = rgbColor(prefs.currentChapterColor)
+    val currentChapterColor = rgbColor(prefs.effectiveCurrentChapterColor)
 
     var saved by remember(book) { mutableStateOf<ReadingPosition?>(null) }
     LaunchedEffect(book) {
@@ -148,6 +151,7 @@ fun ChapterListScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RectangleShape,
                     colors = readerButtonColors(),
+                    border = readerButtonBorder(),
                 ) {
                     Text("数字跳转章节", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
@@ -158,6 +162,7 @@ fun ChapterListScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RectangleShape,
                     colors = readerButtonColors(),
+                    border = readerButtonBorder(),
                 ) {
                     Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
@@ -168,6 +173,7 @@ fun ChapterListScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RectangleShape,
                     colors = readerButtonColors(),
+                    border = readerButtonBorder(),
                 ) {
                     Text("返回文件目录", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
@@ -198,7 +204,9 @@ fun ChapterListScreen(
                     Card(
                         onClick = { onOpenChapter(resume.chapter) },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RectangleShape
+                        shape = RectangleShape,
+                        colors = readerCardColors(),
+                        border = readerCardBorder(),
                     ) {
                         Text(
                             text = "继续阅读",
@@ -232,7 +240,9 @@ fun ChapterListScreen(
                 Card(
                     onClick = { onOpenChapter(index) },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RectangleShape
+                    shape = RectangleShape,
+                    colors = readerCardColors(),
+                    border = readerCardBorder(),
                 ) {
                     Text(
                         text = title,
@@ -291,6 +301,7 @@ private fun MenuBar(menuOpen: Boolean, onToggle: () -> Unit) {
             modifier = Modifier.height(MenuBarHeight),
             shape = RectangleShape,
             colors = readerButtonColors(),
+            border = readerButtonBorder(),
             contentPadding = PaddingValues(vertical = 0.dp),
         ) {
             Text(

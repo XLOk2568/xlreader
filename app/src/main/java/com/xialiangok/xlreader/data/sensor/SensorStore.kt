@@ -55,9 +55,14 @@ class SensorStore(context: Context) {
             put("intervalMs", value.intervalMs)
             put("restMs", value.restMs)
             put("pages", pages)
+            // 记下这份页面集合是哪个版本写的: 以后新增页面时据此只给老设置补上新增的那几页,
+            // 用户已经手动取消勾选的页面不会被反复加回来.
+            put("pagesVersion", PAGES_VERSION)
             put("gestures", gestures)
             put("multiGesture", value.multiGesture)
             put("multiMode", value.multiMode.name)
+            put("autoClick", value.autoClick)
+            put("autoClickDelaySeconds", value.autoClickDelaySeconds)
         }.toString()
     }
 
@@ -109,17 +114,42 @@ class SensorStore(context: Context) {
                 }
             },
             // 老设置里没有 pages 这个键时，给「全部页面」这份默认值，而不是空集（空集等于手势全废）。
-            pages = if (json.has("pages")) pages else GesturePage.entries.toSet(),
+            // 有 pages 但版本更老时补上那一版新增的几页: 用户之前没得选, 不该默认把它们关着.
+            pages = when {
+                !json.has("pages") -> GesturePage.entries.toSet()
+                json.optInt("pagesVersion", 0) < PAGES_VERSION -> pages + PAGES_ADDED_IN_V2
+                else -> pages
+            },
             gestures = gestures,
             // 老设置里没有这两个键：默认「只跑第一个命中的」，即一直以来的行为。
             multiGesture = json.optBoolean("multiGesture", false),
             multiMode = runCatching { MultiGestureMode.valueOf(json.optString("multiMode")) }
                 .getOrDefault(MultiGestureMode.Simultaneous),
+            // 老设置里没有自动单击: 默认关, 也就是一直以来的行为.
+            autoClick = json.optBoolean("autoClick", false),
+            autoClickDelaySeconds = json.optInt(
+                "autoClickDelaySeconds",
+                SensorSettings.DEFAULT_AUTO_CLICK_SECONDS,
+            ).coerceIn(
+                SensorSettings.MIN_AUTO_CLICK_SECONDS,
+                SensorSettings.MAX_AUTO_CLICK_SECONDS,
+            ),
         )
     }
 
     private companion object {
         const val PREFS_NAME = "xlreader_sensor"
         const val KEY_SENSOR = "sensor_settings"
+
+        /** 页面集合的迁移版本: 2 起支持设置 / 关于 / 解压询问 / 局域网文件管理. */
+        const val PAGES_VERSION = 2
+
+        /** 版本 2 新增的页面: 老设置里没有它们, 读的时候补上 (之后用户可以自己关). */
+        val PAGES_ADDED_IN_V2 = setOf(
+            GesturePage.Settings,
+            GesturePage.About,
+            GesturePage.CachePrompt,
+            GesturePage.LanFileManager,
+        )
     }
 }

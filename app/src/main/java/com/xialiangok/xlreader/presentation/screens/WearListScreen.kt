@@ -24,13 +24,14 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
@@ -105,7 +106,10 @@ fun WearListScreen(
     // 系统默认上下留白是屏高的 10%, 这里按设置换成用户自己定的上下边距 (替换而非叠加).
     val prefs = LocalReaderPreferences.current
     val layoutDirection = LocalLayoutDirection.current
-    AppScaffold {
+    // timeText 必须同时传给 AppScaffold: 它的默认值是 { TimeText() } (原生弧形时间),
+    // 而 ScreenScaffold 没登记到 timeText 时, AppScaffold 会拿这个默认值垫上,
+    // 于是「不要时间」的页面 (正文页 timeText = {}) 也会冒出原生 Wear 时间. 两处传同一份就不会.
+    AppScaffold(timeText = timeText) {
         // resetKey 为 null 时**连这个 effect 都不建**: LaunchedEffect 每次进入组合都会跑一遍,
         // 页面重新组合 (比如从设置页回到文件列表) 时 resetKey 没变也会把位置拉回 [startIndex].
         if (resetKey != null) {
@@ -213,14 +217,19 @@ private fun ReaderTimeText() {
 }
 
 /**
- * 无弧度的数字时间, 样式接近手机状态栏: 顶部居中, 小号, 每跨过一分钟刷新一次.
+ * 无弧度的数字时间, 样式接近手机状态栏: 顶部居中, 每跨过一分钟刷新一次.
  *
  * 不复用 [TimeText]: 它画在弧线上, 用户明确要一个「没有弧度」的方案.
  * 时间固定 24 小时制, 不跟随系统的 12 小时设置.
  *
- * 底下垫一条**纯黑**底色: 时间文本是被 [AppScaffold] 叠在内容之上画的 (先 content 后 timeText),
+ * 2026-10-31 起按用户口径: 字号与颜色亮度都跟随正文 (fontSize / 正文亮的同一份),
+ * 不透明, 底色块改成直角 (不再用圆角).
+ *
+ * 文字底下垫一块**纯黑**底色: 时间文本是被 [AppScaffold] 叠在内容之上画的 (先 content 后 timeText),
  * 列表滚动时会从数字下面透出来, 看着很脏; 库自带的弧形时间靠背后那圈弧线底色挡住, 这里没有弧,
- * 只能自己补一层. 用纯黑而不是设置里的背景色, AMOLED 上黑像素不发光, 这一条不会变成一块灰板.
+ * 只能自己补一层. 底色**只包住文字** (不 fillMaxWidth): 铺满整行会在滚动时把整条卡片都盖黑,
+ * 左右还露出一条突兀的直边.
+ * 用纯黑而不是设置里的背景色, AMOLED 上黑像素不发光, 这一块不会变成一块灰板.
  */
 @Composable
 private fun PhoneTimeText() {
@@ -234,20 +243,26 @@ private fun PhoneTimeText() {
     }
     // 默认 24 小时制, 不跟随系统的 12/24 小时设置.
     val formatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    // 离屏幕上沿多远由设置里的「顶部悬浮上边距」决定 (只有 PhoneUI 这一种时间有).
+    val topMargin = LocalReaderPreferences.current.homeHoverTop.dp
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(ReaderBlack)
-            .padding(top = 10.dp, bottom = 4.dp),
+            .padding(top = topMargin, bottom = 4.dp),
+        // 文字水平居中; 黑色底随文字宽度收缩, 不再铺满整行.
+        contentAlignment = Alignment.Center,
     ) {
         Text(
             text = formatter.format(Date(now)),
             textAlign = TextAlign.Center,
-            // 字号固定 15sp, 和原生弧形时间看齐, 不跟着正文字号一起放大.
-            style = MaterialTheme.typography.labelMedium.copy(fontSize = 15.sp, lineHeight = 18.sp),
+            // 字号跟随正文 (bodyMedium 就是正文那一档, 见 Theme.kt 的 Typography 重写).
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
+            // onSurface 是正文色叠加亮度后的值, 不透明, 不再压暗成次要文字色.
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .background(ReaderBlack, RectangleShape)
+                .padding(horizontal = 8.dp, vertical = 2.dp),
         )
     }
 }

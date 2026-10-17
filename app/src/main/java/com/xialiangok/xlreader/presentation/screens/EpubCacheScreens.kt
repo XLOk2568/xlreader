@@ -5,11 +5,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -17,7 +21,11 @@ import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
+import com.xialiangok.xlreader.presentation.BindGestureActions
+import com.xialiangok.xlreader.presentation.scrollByDp
+import com.xialiangok.xlreader.presentation.theme.readerButtonBorder
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
+import kotlinx.coroutines.launch
 
 /**
  * 解压/询问期间强制屏幕常亮.
@@ -119,7 +127,18 @@ fun CachePromptScreen(
     onCancel: () -> Unit,
 ) {
     KeepScreenOn()
-    WearListScreen {
+
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+
+    // 体感手势: 「返回」等于取消(和页面底部那个按钮同一条路), 上下翻页滚动这一页.
+    BindGestureActions(
+        onBack = onCancel,
+        onScrollBy = { delta -> scope.launch { scrollByDp(listState, delta, density) } },
+    )
+
+    WearListScreen(listState = listState) {
         item { ListHeader { Text("已有解压缓存", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) } }
         item {
             Text(
@@ -145,17 +164,17 @@ fun CachePromptScreen(
         }
 
         item {
-            Button(onClick = onKeep, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
+            Button(onClick = onKeep, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors(), border = readerButtonBorder()) {
                 Text("直接阅读（不更新）", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
-            Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
+            Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors(), border = readerButtonBorder()) {
                 Text("更新缓存", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
         item {
-            Button(onClick = onCancel, modifier = Modifier.fillMaxWidth(), colors = readerButtonColors()) {
+            Button(onClick = onCancel, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors(), border = readerButtonBorder()) {
                 Text("取消", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }

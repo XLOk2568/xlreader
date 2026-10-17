@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
@@ -40,26 +39,32 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.SwitchButton
 import androidx.wear.compose.material3.Text
 import com.xialiangok.xlreader.data.ReaderPreferences
 import com.xialiangok.xlreader.data.blueOf
+import com.xialiangok.xlreader.data.formatBrightness
 import com.xialiangok.xlreader.data.formatScreenBrightness
 import com.xialiangok.xlreader.data.greenOf
 import com.xialiangok.xlreader.data.packRgb
 import com.xialiangok.xlreader.data.redOf
 import com.xialiangok.xlreader.data.spacingLabel
-import com.xialiangok.xlreader.data.stepAlpha
+import com.xialiangok.xlreader.data.stepBrightness
 import com.xialiangok.xlreader.data.stepChannel
 import com.xialiangok.xlreader.data.stepFontSize
 import com.xialiangok.xlreader.data.stepSpacingLevel
 import com.xialiangok.xlreader.presentation.BindGestureActions
+import com.xialiangok.xlreader.presentation.findActivity
 import com.xialiangok.xlreader.presentation.scrollByDp
+import com.xialiangok.xlreader.presentation.theme.readerButtonBorder
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
 import com.xialiangok.xlreader.presentation.theme.readerButtonContainerColor
 import kotlinx.coroutines.delay
@@ -72,11 +77,11 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
 
-/** 当前选中控件的边框色: 用户指定的 rgb(255, 0, 255). */
-private val SelectionBorderColor = Color(0xFFFF00FF)
+/** 当前选中控件的边框色: 用户指定的 rgb(255, 0, 255). 正文页底部的按钮共用. */
+internal val SelectionBorderColor = Color(0xFFFF00FF)
 
 /** 边框粗细: 标准 52dp 按钮与 36dp 圆形步进按钮上都看得清, 又不至于盖住内容. */
-private val SelectionBorderWidth = 2.dp
+internal val SelectionBorderWidth = 2.dp
 
 /**
  * 菜单里每一行的 key.
@@ -93,12 +98,12 @@ private const val ROW_GROUP_DISPLAY = "屏幕设置"
 private const val ROW_GROUP_FONT = "阅读界面设置"
 private const val ROW_GROUP_TEXT = "短距和字号"
 private const val ROW_KEEP_ON = "menu.keepScreenOn"
+private const val ROW_GESTURE = "menu.gestureEnabled"
 private const val ROW_BRIGHTNESS = "menu.brightness"
 private const val ROW_TEXT_BRIGHTNESS = "menu.textBrightness"
 private const val ROW_TEXT_RED = "menu.textRed"
 private const val ROW_TEXT_GREEN = "menu.textGreen"
 private const val ROW_TEXT_BLUE = "menu.textBlue"
-private const val ROW_TEXT_ALPHA = "menu.textAlpha"
 private const val ROW_RESET_TEXT_COLOR = "menu.resetTextColor"
 private const val ROW_FONT_SIZE = "menu.fontSize"
 private const val ROW_SPACING = "menu.spacing"
@@ -108,7 +113,7 @@ private enum class MenuGroup(val header: String, val rows: List<String>) {
     /** 亮度与显示: 常亮 + 屏幕亮度. */
     Display(ROW_GROUP_DISPLAY, listOf(ROW_KEEP_ON, ROW_BRIGHTNESS)),
 
-    /** 字体显示: 文字亮度 + 文字颜色 RGB + 透明度 + 恢复默认, 更多颜色在设置页. */
+    /** 字体显示: 文字亮度 + 文字颜色 RGB + 恢复默认, 更多颜色在设置页. */
     Font(
         ROW_GROUP_FONT,
         listOf(
@@ -116,7 +121,6 @@ private enum class MenuGroup(val header: String, val rows: List<String>) {
             ROW_TEXT_RED,
             ROW_TEXT_GREEN,
             ROW_TEXT_BLUE,
-            ROW_TEXT_ALPHA,
             ROW_RESET_TEXT_COLOR,
         ),
     ),
@@ -132,7 +136,6 @@ private val ROW_CONTROL_COUNTS = mapOf(
     ROW_TEXT_RED to 2,
     ROW_TEXT_GREEN to 2,
     ROW_TEXT_BLUE to 2,
-    ROW_TEXT_ALPHA to 2,
     ROW_FONT_SIZE to 2,
     ROW_SPACING to 2,
 )
@@ -145,17 +148,8 @@ private val SCREEN_BRIGHTNESS_STEPS = listOf(
     0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f,
 )
 
-/** 文字亮度可选值, 从最暗到最亮. */
-private val TEXT_BRIGHTNESS_STEPS: List<Float> = buildList {
-    var value = ReaderPreferences.MIN_TEXT_BRIGHTNESS
-    while (value <= ReaderPreferences.MAX_TEXT_BRIGHTNESS + 0.001f) {
-        add((value * 100).toInt() / 100f)
-        value += ReaderPreferences.TEXT_BRIGHTNESS_STEP
-    }
-}
-
-/** 给当前选中的控件套一圈边框; 没被选中就原样返回. */
-private fun Modifier.selectionBorder(selected: Boolean, shape: Shape = RectangleShape): Modifier =
+/** 给当前选中的控件套一圈边框; 没被选中就原样返回. 正文页底部按钮共用. */
+internal fun Modifier.selectionBorder(selected: Boolean, shape: Shape = RectangleShape): Modifier =
     if (selected) border(SelectionBorderWidth, SelectionBorderColor, shape) else this
 
 /**
@@ -192,7 +186,8 @@ private fun centeredSelectableRow(listState: LazyListState, selectable: Set<Stri
  *
  * 设置项收进三个分组按钮 (亮度与显示 / 字体显示 / 文本显示), 默认都不展开,
  * 点一下展开, 再点一下收起; 展开另一组时原来那组自动收起, 避免列表越滚越长.
- * 「字体显示」里有文字亮度, 文字颜色 RGB, 透明度与恢复默认; 更多颜色在设置页.
+ * 「字体显示」里有正文亮度, 文字颜色 RGB 与恢复默认; 更多颜色在设置页.
+ * 「体感手势」总开关单独放在分组之外, 关掉后根组件会直接注销传感器.
  *
  * 体感手势 (菜单开着时这一层自己接管, 正文页那一份同时注销, 见 [ChapterScreen]):
  * - 上下翻页 = 按体感设置里的速度 (dp) 滚菜单内容, 和正文页用同一套滚动;
@@ -202,21 +197,34 @@ private fun centeredSelectableRow(listState: LazyListState, selectable: Set<Stri
  * - 单击 = 执行光标所在的那个控件, 返回 = 关菜单.
  *
  * [gestureEnabled] 为假时上面这一整套都不存在: 不登记任何手势动作, 也不画选中光标.
+ *
+ * @param sensorEnabled       体感手势总开关的当前值, 关掉时根组件不再注册传感器.
+ * @param onSensorEnabledChange 拨动总开关后回写体感设置.
+ * @param autoClick           上下翻页自动单击开关.
+ * @param autoClickDelaySeconds 翻页停下后等多少秒自动单击 (0 = 立即).
  */
 @Composable
 fun ReaderMenuOverlay(
     preferences: ReaderPreferences,
     onPreferencesChange: (ReaderPreferences) -> Unit,
     onOpenCatalog: () -> Unit,
+    /** 有没有「打开目录」这一项; 纯文本阅读页没有目录, 传 false 整行不出现. */
+    showCatalog: Boolean = true,
     onBackToFileList: () -> Unit,
     onOpenSettings: () -> Unit,
     onDismiss: () -> Unit,
     gestureEnabled: Boolean,
+    sensorEnabled: Boolean,
+    onSensorEnabledChange: (Boolean) -> Unit,
+    autoClick: Boolean,
+    autoClickDelaySeconds: Int,
 ) {
     val update = rememberUpdatedState(onPreferencesChange)
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    // 用它挡住「息屏 / 退到后台后才到点」的自动单击.
+    val lifecycleOwner = LocalContext.current.findActivity() as? LifecycleOwner
 
     // 当前展开的分组; null = 三组都收起 (默认状态).
     var expandedGroup by remember { mutableStateOf<MenuGroup?>(null) }
@@ -225,12 +233,18 @@ fun ReaderMenuOverlay(
     var cursorRow by remember { mutableStateOf(ROW_CLOSE) }
     var cursorIndex by remember { mutableIntStateOf(0) }
 
+    // 自动单击只在翻过一次页之后才武装: 菜单刚打开时光标停在「关闭菜单」上, 不该自己点掉.
+    // 每次翻页都 +1, 让下面的倒计时从头开始, 也就取消了上一次还没落地的单击.
+    var autoClickArmed by remember { mutableStateOf(false) }
+    var autoClickTick by remember { mutableIntStateOf(0) }
+
     // 可见的可选中行会随分组展开/收起变化, 光标与翻页都只在这份列表里走.
     val selectableRows = buildList {
         add(ROW_CLOSE)
-        add(ROW_CATALOG)
+        if (showCatalog) add(ROW_CATALOG)
         add(ROW_FILE_LIST)
         add(ROW_SETTINGS)
+        add(ROW_GESTURE)
         MenuGroup.entries.forEach { group ->
             add(group.header)
             if (expandedGroup == group) addAll(group.rows)
@@ -240,12 +254,27 @@ fun ReaderMenuOverlay(
 
     fun cursorAt(row: String): Boolean = gestureEnabled && cursorRow == row
 
-    /** 把光标沿行挪 [delta] 行 (挪到头就停住), 并把行内下标夹回这一行真有的控件数. */
+    /**
+     * 把光标往 [delta] 方向挪: 先在这一行的横排控件里走 (上翻页向左, 下翻页向右),
+     * 走到这一行的头/尾再换到相邻行; 换行时也按方向落到那一行的对应一侧.
+     */
     fun moveSelection(delta: Int) {
+        val count = controlCountOf(cursorRow)
+        if (count > 1) {
+            if (delta > 0 && cursorIndex < count - 1) {
+                cursorIndex += 1
+                return
+            }
+            if (delta < 0 && cursorIndex > 0) {
+                cursorIndex -= 1
+                return
+            }
+        }
         val index = selectableRows.indexOf(cursorRow).coerceAtLeast(0)
         val next = selectableRows[(index + delta).coerceIn(0, selectableRows.lastIndex)]
         cursorRow = next
-        cursorIndex = cursorIndex.coerceAtMost(controlCountOf(next) - 1)
+        // 上翻页选左方控件, 下翻页选右方控件 (用户口径).
+        cursorIndex = if (delta > 0) controlCountOf(next) - 1 else 0
     }
 
     /** 展开/收起一个分组; 光标落在刚被收起的子控件上时退回该组按钮. */
@@ -286,10 +315,10 @@ fun ReaderMenuOverlay(
         update.value(preferences.copy(screenBrightness = stepInList(SCREEN_BRIGHTNESS_STEPS, preferences.screenBrightness, +1)))
     }
     val onTextBrightnessDown: () -> Unit = {
-        update.value(preferences.copy(textBrightness = stepInList(TEXT_BRIGHTNESS_STEPS, preferences.textBrightness, -1)))
+        update.value(preferences.copy(textBrightness = stepBrightness(preferences.textBrightness, -1)))
     }
     val onTextBrightnessUp: () -> Unit = {
-        update.value(preferences.copy(textBrightness = stepInList(TEXT_BRIGHTNESS_STEPS, preferences.textBrightness, +1)))
+        update.value(preferences.copy(textBrightness = stepBrightness(preferences.textBrightness, +1)))
     }
     val textRed = redOf(preferences.textColor)
     val textGreen = greenOf(preferences.textColor)
@@ -312,18 +341,11 @@ fun ReaderMenuOverlay(
     val onTextBlueUp: () -> Unit = {
         update.value(preferences.copy(textColor = packRgb(textRed, textGreen, stepChannel(textBlue, +1))))
     }
-    val onTextAlphaDown: () -> Unit = {
-        update.value(preferences.copy(textColorAlpha = stepAlpha(preferences.textColorAlpha, -1)))
-    }
-    val onTextAlphaUp: () -> Unit = {
-        update.value(preferences.copy(textColorAlpha = stepAlpha(preferences.textColorAlpha, +1)))
-    }
     val onResetTextColor: () -> Unit = {
         update.value(
             preferences.copy(
                 textColor = ReaderPreferences.DEFAULT_TEXT_COLOR,
-                textColorAlpha = ReaderPreferences.DEFAULT_COLOR_ALPHA,
-                textBrightness = ReaderPreferences.MAX_TEXT_BRIGHTNESS,
+                textBrightness = ReaderPreferences.DEFAULT_TEXT_BRIGHTNESS,
             ),
         )
     }
@@ -334,6 +356,7 @@ fun ReaderMenuOverlay(
         ROW_CATALOG to listOf(onOpenCatalog),
         ROW_FILE_LIST to listOf(onBackToFileList),
         ROW_SETTINGS to listOf(onOpenSettings),
+        ROW_GESTURE to listOf { onSensorEnabledChange(!sensorEnabled) },
         ROW_GROUP_DISPLAY to listOf { toggleGroup(MenuGroup.Display) },
         ROW_GROUP_FONT to listOf { toggleGroup(MenuGroup.Font) },
         ROW_GROUP_TEXT to listOf { toggleGroup(MenuGroup.Text) },
@@ -343,19 +366,53 @@ fun ReaderMenuOverlay(
         ROW_TEXT_RED to listOf(onTextRedDown, onTextRedUp),
         ROW_TEXT_GREEN to listOf(onTextGreenDown, onTextGreenUp),
         ROW_TEXT_BLUE to listOf(onTextBlueDown, onTextBlueUp),
-        ROW_TEXT_ALPHA to listOf(onTextAlphaDown, onTextAlphaUp),
         ROW_RESET_TEXT_COLOR to listOf(onResetTextColor),
         ROW_FONT_SIZE to listOf(onFontSizeDown, onFontSizeUp),
         ROW_SPACING to listOf(onSpacingDown, onSpacingUp),
     )
 
+    // 自动单击: 翻页停下后光标停在哪个控件上, 等够时间就替用户点它.
+    // 光标被翻页挪动 / 内容滚到新的行时, 下面这个 effect 会重新开始倒计时.
+    LaunchedEffect(
+        gestureEnabled,
+        autoClick,
+        autoClickDelaySeconds,
+        autoClickArmed,
+        autoClickTick,
+        cursorRow,
+        cursorIndex,
+    ) {
+        if (!gestureEnabled || !autoClick || !autoClickArmed) return@LaunchedEffect
+        delay(autoClickDelaySeconds * 1000L)
+        // 等待期间息屏 / 退到后台就不该再替用户点: 他看不见, 动作也不该发生.
+        if (lifecycleOwner?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != true) {
+            return@LaunchedEffect
+        }
+        val action = controlsByRow[cursorRow]?.getOrNull(cursorIndex) ?: return@LaunchedEffect
+        // 点完就解除武装, 免得这次点击引起的重组又把它点一遍.
+        autoClickArmed = false
+        action()
+    }
+
     // 菜单开着时接管体感手势 (正文页那份同时注销, 见 ChapterScreen).
     // 没启用「正文阅读(菜单)」这一页时干脆不登记: 菜单里没有任何体感动作, 只靠手指用.
     if (gestureEnabled) {
         BindGestureActions(
-            onTap = { controlsByRow[cursorRow]?.getOrNull(cursorIndex)?.invoke() },
-            onBack = onDismiss,
+            onTap = {
+                // 手动单击了就别再自动点一次.
+                autoClickArmed = false
+                controlsByRow[cursorRow]?.getOrNull(cursorIndex)?.invoke()
+            },
+            onBack = {
+                autoClickArmed = false
+                onDismiss()
+            },
             onScrollBy = { delta ->
+                // 翻页一响就重新武装自动单击 (并取消上一次的倒计时).
+                if (autoClick) {
+                    autoClickArmed = true
+                    autoClickTick += 1
+                }
                 // 内容还能往这个方向滚就滚内容, 已经滚到头就只挪光标 (一次一行).
                 // 还没量出来 (刚打开菜单, 列表高度还是 0) 时一律当还能滚.
                 val measured = listState.layoutInfo.totalItemsCount > 0
@@ -374,6 +431,13 @@ fun ReaderMenuOverlay(
             .background(MaterialTheme.colorScheme.background)
             .pointerInput(Unit) {
                 detectTapGestures { onDismiss() }
+            }
+            // 手指一碰菜单就取消还没到点的自动单击: 有手指操作时不该再替用户点.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    autoClickArmed = false
+                }
             },
     ) {
         // 用 LazyColumn 而不是带 verticalScroll 的 Column: 分组要懒加载,
@@ -412,21 +476,25 @@ fun ReaderMenuOverlay(
                         .selectionBorder(cursorAt(ROW_CLOSE)),
                     shape = RectangleShape,
                     colors = readerButtonColors(),
+                    border = readerButtonBorder(),
                 ) {
                     Text(text = "关闭菜单", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
 
-            item(key = ROW_CATALOG) {
-                Button(
-                    onClick = onOpenCatalog,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectionBorder(cursorAt(ROW_CATALOG)),
-                    shape = RectangleShape,
-                    colors = readerButtonColors(),
-                ) {
-                    Text(text = "打开目录", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            if (showCatalog) {
+                item(key = ROW_CATALOG) {
+                    Button(
+                        onClick = onOpenCatalog,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectionBorder(cursorAt(ROW_CATALOG)),
+                        shape = RectangleShape,
+                        colors = readerButtonColors(),
+                        border = readerButtonBorder(),
+                    ) {
+                        Text(text = "打开目录", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    }
                 }
             }
 
@@ -438,6 +506,7 @@ fun ReaderMenuOverlay(
                         .selectionBorder(cursorAt(ROW_FILE_LIST)),
                     shape = RectangleShape,
                     colors = readerButtonColors(),
+                    border = readerButtonBorder(),
                 ) {
                     Text(text = "返回文件列表", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
@@ -451,8 +520,27 @@ fun ReaderMenuOverlay(
                         .selectionBorder(cursorAt(ROW_SETTINGS)),
                     shape = RectangleShape,
                     colors = readerButtonColors(),
+                    border = readerButtonBorder(),
                 ) {
                     Text(text = "设置", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                }
+            }
+
+            // 体感总开关放在分组之外: 关掉它根组件立刻注销传感器, 不用展开任何分组.
+            item(key = ROW_GESTURE) {
+                SwitchButton(
+                    checked = sensorEnabled,
+                    onCheckedChange = onSensorEnabledChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectionBorder(cursorAt(ROW_GESTURE)),
+                ) {
+                    Text(
+                        "体感手势",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
 
@@ -508,7 +596,7 @@ fun ReaderMenuOverlay(
                 item(key = ROW_TEXT_BRIGHTNESS) {
                     StepRow(
                         label = "文字亮度",
-                        value = "${(preferences.textBrightness * 100).toInt()}%",
+                        value = formatBrightness(preferences.textBrightness),
                         onMinus = onTextBrightnessDown,
                         onPlus = onTextBrightnessUp,
                         selectedControl = if (cursorAt(ROW_TEXT_BRIGHTNESS)) cursorIndex else null,
@@ -541,21 +629,13 @@ fun ReaderMenuOverlay(
                         selectedControl = if (cursorAt(ROW_TEXT_BLUE)) cursorIndex else null,
                     )
                 }
-                item(key = ROW_TEXT_ALPHA) {
-                    StepRow(
-                        label = "透明度",
-                        value = preferences.textColorAlpha.toString(),
-                        onMinus = onTextAlphaDown,
-                        onPlus = onTextAlphaUp,
-                        selectedControl = if (cursorAt(ROW_TEXT_ALPHA)) cursorIndex else null,
-                    )
-                }
                 item(key = ROW_RESET_TEXT_COLOR) {
                     Button(
                         onClick = onResetTextColor,
                         modifier = Modifier.selectionBorder(cursorAt(ROW_RESET_TEXT_COLOR)),
                         shape = RectangleShape,
                         colors = readerButtonColors(),
+                        border = readerButtonBorder(),
                     ) {
                         Text(text = "文字颜色恢复默认", textAlign = TextAlign.Center)
                     }
@@ -610,6 +690,7 @@ private fun GroupButton(
             .selectionBorder(selected),
         shape = RectangleShape,
         colors = readerButtonColors(),
+        border = readerButtonBorder(),
     ) {
         Text(
             text = "${group.header} ${if (expanded) "▾" else "▸"}",
@@ -734,10 +815,11 @@ private fun StepButton(label: String, onStep: () -> Unit, selected: Boolean = fa
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .size(36.dp)
-            .clip(CircleShape)
+            .clip(RectangleShape)
             .background(readerButtonContainerColor())
-            // 边框画在背景之后: 圆形按钮上刚好贴着边, 套在文字外圈.
-            .selectionBorder(selected, CircleShape)
+            // 边框画在背景之后: 按钮底色退成描边之后, 这圈边和选中框在同一层边界上.
+            .border(readerButtonBorder(), RectangleShape)
+            .selectionBorder(selected, RectangleShape)
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()

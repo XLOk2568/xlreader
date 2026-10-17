@@ -27,7 +27,14 @@ android {
         minSdk = 30
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0.2611.25"
+        versionName = "1.0.2611.41"
+
+        ndk {
+            // 手表只有 ARM 设备, QuickJS 的 x86 / x86_64 两套 .so 只是给模拟器用的,
+            // 打进包里白白多占 1.7MB 左右, 这里直接排除.
+            //noinspection ChromeOsAbiSupport
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
 
     signingConfigs {
@@ -59,21 +66,21 @@ android {
         // debug：**故意不开** R8 优化，保持 Android Studio 的标准开发体验。
         //
         // 之前的版本把 optimization.enable 也设成了 true，结果 debug 变体的字节码
-        // 被 R8 处理过，副作用是：
-        //   1. Android Studio 里 Compose 预览渲染不出来（预览走 Layoutlib，依赖未混淆的类）；
+        // 被 R8 处理过，副作用是
+        //   1. Android Studio 里 Compose 预览渲染不出来（预览走 Layoutlib，依赖未混淆的类）
         //   2. 从 Android Studio 直接 Run 装上去的 debug 包启动即闪退；
-        //   3. 断点调试、Apply Changes 也不可靠。
-        // 另外 android.r8.gradual.support 目前还是实验性开关（AGP 自己会打印 WARNING），
-        // 用在日常调试的变体上本身就不合适。
+        //   3. 断点调试、Apply Changes 也不可靠
+        // 另外 android.r8.gradual.support 目前还是实验性开关（AGP 自己会打印 WARNING）
+        // 用在日常调试的变体上本身就不合适
         //
-        // 体积与流畅度的收益体现在要发布的 release 包上，那里保持开启。
+        // 体积与流畅度的收益体现在要发布的 release 包上，那里保持开启
         debug {
             optimization {
                 enable = false
             }
         }
-        // release：打开 R8 代码压缩/优化、资源压缩，并自动合并依赖库的 baseline profile。
-        // 这才是体积从 26 MB 降到 1.6 MB、并且滑动跟手的来源。
+        // release: 打开 R8 代码压缩/优化, 资源压缩, 并自动合并依赖库的 baseline profile.
+        // 这才是体积从 26MB 降到 1.8MB, 并且滑动跟手的来源, 发布包上必须保持开启.
         release {
             optimization {
                 enable = true
@@ -82,9 +89,29 @@ android {
         }
     }
 
+    packaging {
+        // AGP 9 默认把 dex 和 .so 不压缩地塞进 APK (图安装/启动快).
+        // 对体积敏感的手表包来说不划算: 压缩后 dex 少 ~0.95MB, .so 少 ~0.65MB,
+        // 代价只是安装时多一步解压, 运行时速度没有区别 (dex 照样在安装时优化).
+        dex {
+            useLegacyPackaging = true
+        }
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    lint {
+        // assembleRelease 默认会挂 lintVitalAnalyzeRelease, 实测它单独要 50s 左右,
+        // 和 R8 并行跑也把 release 打包整体拖到 50s+.
+        // 这个包只侧载到手表, 没有上架流程, 平时改完只想要一个能装的 APK, 所以关掉这条自动挂钩.
+        // lint 本身没有删掉, 需要时仍旧可以手动 ./gradlew :app:lintRelease.
+        checkReleaseBuilds = false
     }
 
     buildFeatures {
@@ -104,6 +131,10 @@ dependencies {
 
     // 局域网文件管理用的迷你 HTTP 服务, 只有这一个类库级别的小依赖 (负责 HTTP 解析 / Range).
     implementation(libs.nanohttpd)
+
+    // 插件脚本用的 QuickJS (纯 Java 绑定 + 各 ABI 的 libquickjs.so).
+    // 引擎懒启动, 见 data/plugin/QuickJsEngine.kt; 这里只把库打进包里.
+    implementation(libs.quickjs.android)
 
     // 预览注解必须放在 implementation：@Preview 与 @WearPreviewDevices 写在 src/main 里，
     // 放在 debugImplementation 会让 main 源集编译不过，预览也就无从谈起。

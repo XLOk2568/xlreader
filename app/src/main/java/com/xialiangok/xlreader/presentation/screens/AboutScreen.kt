@@ -2,16 +2,23 @@ package com.xialiangok.xlreader.presentation.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import com.xialiangok.xlreader.data.bundledOpenSourceProjects
+import com.xialiangok.xlreader.presentation.BindGestureActions
+import com.xialiangok.xlreader.presentation.scrollByDp
+import com.xialiangok.xlreader.presentation.theme.readerButtonBorder
 import com.xialiangok.xlreader.presentation.theme.readerButtonColors
+import kotlinx.coroutines.launch
 
 /**
  * 关于页：版本、定位、内容来源，以及通往开源许可页的入口。
@@ -25,7 +32,17 @@ fun AboutScreen(
 ) {
     BackHandler(onBack = onBack)
 
-    WearListScreen {
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+
+    // 体感手势: 这一页只有「返回」和「上下翻页」两个动作.
+    BindGestureActions(
+        onBack = onBack,
+        onScrollBy = { delta -> scope.launch { scrollByDp(listState, delta, density) } },
+    )
+
+    WearListScreen(listState = listState) {
         item {
             ListHeader {
                 Text(
@@ -45,7 +62,7 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "版本 1.0.2611.24 · Wear OS\n最低支持 Android 11（API 30)",
+                text = "版本 1.0.2611.42\n最低支持 Android 11",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -62,8 +79,7 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "电子书来自你自己的手表存储，应用不内置任何内容、不访问互联网、" +
-                    "不上传任何文件；唯一需要的「所有文件访问」权限只用于读取你指定的目录。",
+                text = "电子书来自你自己的设备存储，应用不内置任何电子书，全程离线",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -72,11 +88,13 @@ fun AboutScreen(
         }
         item {
             Text(
-                text = "1.优化体感\n"+
+                text = "1.新增主题设置,并对外观优化\n"+
                         "2.新增自定义颜色和边距了\n"+
-                        "3.新增了文件删除等功能"+
-                        "4.新增局域网文件管理功能"+
-                        "相较于1.0.2611.19版本",
+                        "3.支持quickjs插件功能\n"+
+                        "4.新增局域网文件管理自定义IP功能\n"+
+                        "5.优化了体积"+
+                        "6.支持.txt预览"+
+                        "相较于1.0.2611.31版本",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -85,14 +103,14 @@ fun AboutScreen(
         }
 
         item {
-            Button(onClick = onOpenLicenses, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors()) {
+            Button(onClick = onOpenLicenses, modifier = Modifier.fillMaxWidth(), shape = RectangleShape, colors = readerButtonColors(), border = readerButtonBorder()) {
                 Text("开源许可（${bundledOpenSourceProjects.size} 项）", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
 
         item { ControlSpacer() }
         item {
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape =RectangleShape, colors = readerButtonColors()) {
+            Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape =RectangleShape, colors = readerButtonColors(), border = readerButtonBorder()) {
                 Text("返回", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }

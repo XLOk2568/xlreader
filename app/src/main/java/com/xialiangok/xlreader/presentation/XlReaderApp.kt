@@ -24,7 +24,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.xialiangok.xlreader.data.ReaderPreferences
+import com.xialiangok.xlreader.data.ReaderThemeSet
 import com.xialiangok.xlreader.data.SettingsStore
+import com.xialiangok.xlreader.data.withTheme
 import com.xialiangok.xlreader.data.epub.EpubBook
 import com.xialiangok.xlreader.data.epub.EpubExtractor
 import com.xialiangok.xlreader.data.epub.EpubParser
@@ -54,6 +56,7 @@ import com.xialiangok.xlreader.presentation.screens.ChapterListScreenNumber
 import com.xialiangok.xlreader.presentation.screens.ChapterScreen
 import com.xialiangok.xlreader.presentation.screens.ExtractingScreen
 import com.xialiangok.xlreader.presentation.screens.HomeScreen
+import com.xialiangok.xlreader.presentation.screens.LanIpScreen
 import com.xialiangok.xlreader.presentation.screens.LanFileManagerScreen
 import com.xialiangok.xlreader.presentation.screens.LicensesScreen
 import com.xialiangok.xlreader.presentation.screens.NoticeScreen
@@ -66,6 +69,8 @@ import com.xialiangok.xlreader.presentation.screens.SensorSettingsScreen
 import com.xialiangok.xlreader.presentation.screens.SettingsDataAdminScreen
 import com.xialiangok.xlreader.presentation.screens.SettingsImportScreen
 import com.xialiangok.xlreader.presentation.screens.SettingsScreen
+import com.xialiangok.xlreader.presentation.screens.SettingsThemeScreen
+import com.xialiangok.xlreader.presentation.screens.TextReaderScreen
 import com.xialiangok.xlreader.presentation.theme.XlReaderTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -89,6 +94,12 @@ sealed interface Route {
 
     data class Chapter(val index: Int) : Route
     data object Settings : Route
+
+    /** 主题设置页: 从设置页的「主题设置」进来. */
+    data object Theme : Route
+
+    /** 无线局域网设置页: 显示局域网文件管理的地址 / 端口 / 密码. */
+    data object LanIp : Route
     data object About : Route
     data object Licenses : Route
 
@@ -112,6 +123,9 @@ sealed interface Route {
 
     /** 局域网文件管理（文件列表插件模式里打开）：显示地址与密码，服务开着时手机可传书。 */
     data object LanFileManager : Route
+
+    /** 只读阅读一个 .txt / .xlr 文件（文本文档阅读页），退出不记进度。 */
+    data class TextReader(val path: String) : Route
 }
 
 /** 一本书的打开状态。 */
@@ -163,11 +177,21 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
     // 所有阅读偏好集中在一份数据里：设置页和阅读界面的快捷菜单改的是同一份，
     // 因此在哪儿改都一样，改完两边都生效。
     var preferences by remember { mutableStateOf(store.read()) }
+    // 主题文件里的全部主题与当前下标; 颜色从它展开到 preferences 里.
+    var themeSet by remember { mutableStateOf(store.readThemes()) }
     val updatePreferences: (ReaderPreferences) -> Unit = remember {
         { updated: ReaderPreferences ->
             preferences = updated
+            // 颜色改动 (阅读菜单里的文字颜色 / 亮度) 会同步收回当前主题, 这里重读一次让主题页也看到.
             store.save(updated)
+            themeSet = store.readThemes()
         }
+    }
+    // 主题页改了主题: 先落盘, 再把当前主题的颜色展开成偏好.
+    val applyThemeSet: (ReaderThemeSet) -> Unit = { updated ->
+        themeSet = updated
+        store.saveThemes(updated)
+        preferences = preferences.withTheme(updated.active)
     }
 
     val context = LocalContext.current
@@ -264,6 +288,27 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
     var settingsReturnChapter by remember { mutableStateOf<Int?>(null) }
 
     /**
+     * 从文本文档阅读页打开设置页时正在看的那个文件；设置页里的返回就是回到它。
+     *
+     * 和 [settingsReturnChapter] 同理：设置是「打开」不是「返回」，退一步不该把文档关掉。
+     */
+    var settingsReturnTextPath by remember { mutableStateOf<String?>(null) }
+
+    /**
+     * data 目录页是从文件列表的插件模式进来的（而不是从设置页）。
+     *
+     * 这个页面两边共用: 从文件列表进来时返回回文件列表, 从设置进来时返回回设置.
+     */
+    var dataAdminFromBrowser by remember { mutableStateOf(false) }
+
+    /**
+     * 文本文档阅读页是从文件列表进来的（而不是从 data 目录页）。
+     *
+     * 这个页面两边共用: 从文件列表进来时返回回文件列表, 从 data 目录进来时返回回 data 目录.
+     */
+    var textReaderFromBrowser by remember { mutableStateOf(true) }
+
+    /**
      * 阅读界面的快捷菜单是不是开着。
      *
      * 状态放在根组件而不是正文页里：从菜单「打开目录」时**不清掉它**，
@@ -338,14 +383,27 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
         }
     }
 
-    // 手势只在内容页里有意义，别的页面（设置、关于、录制中…）一律不检测。
+    // 手势只在有内容可操作的页面里有意义，别的页面（体感设置、录制中…）一律不检测。
     // 数字跳章页算在目录里：它是目录页自动弹出来的附页，在那儿手势不该突然失灵。
     // 阅读菜单开着时换成「正文阅读(菜单)」那一页：菜单铺满整屏，手势该落在菜单上；
     // 这一页没勾上就不跑检测任务，菜单只靠手指操作。
+    // 打开一本书的那条路上有几种状态：只有目录页和「已有缓存」询问页是可操作的，
+    // 读取 / 解压 / 失败三页没有手势动作，直接不检测（省电）。
     val gesturePage = when (route) {
         Route.Browser -> GesturePage.FileList
-        Route.Book, Route.CatalogNumber -> GesturePage.Catalog
+        Route.Book -> when (bookState) {
+            BookState.AskRefresh -> GesturePage.CachePrompt
+            is BookState.Ready -> GesturePage.Catalog
+            else -> null
+        }
+        Route.CatalogNumber -> GesturePage.Catalog
         is Route.Chapter -> if (readerMenuVisible) GesturePage.ReaderMenu else GesturePage.Reader
+        is Route.TextReader -> if (readerMenuVisible) GesturePage.ReaderMenu else GesturePage.Reader
+        Route.Settings -> GesturePage.Settings
+        Route.Theme -> GesturePage.Settings
+        Route.LanIp -> GesturePage.Settings
+        Route.About -> GesturePage.About
+        Route.LanFileManager -> GesturePage.LanFileManager
         else -> null
     }
     // 当前页面此刻要检测的手势：总开关、启用页面、单个手势开关三个条件都满足才留下来。
@@ -474,6 +532,7 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
     fun openSettingsFromReader(book: EpubBook, chapterIndex: Int) {
         saveProgressOnLeave(book, chapterIndex)
         settingsReturnChapter = chapterIndex
+        settingsReturnTextPath = null
         route = Route.Settings
     }
 
@@ -614,12 +673,20 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                         requestBook(path, BookAction.Prepare)
                         route = Route.Book
                     },
+                    // .txt / .xlr 选择「直接阅读」: 进只读阅读页, 返回时回到这个文件列表.
+                    onOpenTextFile = { path ->
+                        textReaderFromBrowser = true
+                        // 上一本书留在菜单上的状态不能带过来.
+                        readerMenuVisible = false
+                        route = Route.TextReader(path)
+                    },
                     onNavigateUp = {
                         parentWithinRoot(File(browserDir))?.let { setBrowserDir(it.absolutePath) }
                     },
                     // 从文件列表进设置：返回就回文件列表（把阅览器那条来路清掉）。
                     onOpenSettings = {
                         settingsReturnChapter = null
+                        settingsReturnTextPath = null
                         route = Route.Settings
                     },
                     onOpenAbout = { route = Route.About },
@@ -631,6 +698,11 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                     },
                     // 插件模式里的「局域网管理文件」：默认停在当前浏览的目录.
                     onOpenLanFileManager = { route = Route.LanFileManager },
+                    // 插件模式里的「打开 data 目录」：直接进设置页那套数据目录界面, 返回回文件列表.
+                    onOpenDataAdmin = {
+                        dataAdminFromBrowser = true
+                        route = Route.DataAdmin
+                    },
                     // 改名 / 删除 / 粘贴动了当前目录: 重新列一遍.
                     onFilesChanged = { browserRevision += 1 },
                 )
@@ -731,6 +803,10 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                             menuVisible = readerMenuVisible,
                             onMenuVisibleChange = { readerMenuVisible = it },
                             menuGestureEnabled = menuGestureEnabled,
+                            sensorEnabled = sensorSettings.enabled,
+                            onSensorEnabledChange = { updateSensorSettings(sensorSettings.copy(enabled = it)) },
+                            autoClick = sensorSettings.autoClick,
+                            autoClickDelaySeconds = sensorSettings.autoClickDelaySeconds,
                         )
                     } else {
                         NoticeScreen(
@@ -741,23 +817,85 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                     }
                 }
 
+                is Route.TextReader -> {
+                    val readerRoute = current
+                    TextReaderScreen(
+                        filePath = readerRoute.path,
+                        preferences = preferences,
+                        onPreferencesChange = updatePreferences,
+                        onBack = {
+                            readerMenuVisible = false
+                            route = if (textReaderFromBrowser) Route.Browser else Route.DataAdmin
+                        },
+                        onOpenSettings = {
+                            settingsReturnChapter = null
+                            settingsReturnTextPath = readerRoute.path
+                            route = Route.Settings
+                        },
+                        menuVisible = readerMenuVisible,
+                        onMenuVisibleChange = { readerMenuVisible = it },
+                        menuGestureEnabled = menuGestureEnabled,
+                        sensorEnabled = sensorSettings.enabled,
+                        onSensorEnabledChange = { updateSensorSettings(sensorSettings.copy(enabled = it)) },
+                        autoClick = sensorSettings.autoClick,
+                        autoClickDelaySeconds = sensorSettings.autoClickDelaySeconds,
+                    )
+                }
+
                 Route.Settings -> SettingsScreen(
                     preferences = preferences,
                     onPreferencesChange = updatePreferences,
+                    sensorEnabled = sensorSettings.enabled,
+                    onSensorEnabledChange = { updateSensorSettings(sensorSettings.copy(enabled = it)) },
                     onOpenSensorSettings = { route = Route.SensorSettings },
-                    onOpenDataAdmin = { route = Route.DataAdmin },
+                    onOpenTheme = { route = Route.Theme },
+                    onOpenLanIp = { route = Route.LanIp },
+                    onOpenDataAdmin = {
+                        dataAdminFromBrowser = false
+                        route = Route.DataAdmin
+                    },
                     // 从阅读菜单进来的（settingsReturnChapter 有值）回到那一章，
+                    // 从文本文档阅读页进来的（settingsReturnTextPath 有值）回到那个文件，
                     // 从文件列表进来的回文件列表。
                     onBack = {
-                        route = settingsReturnChapter?.let { Route.Chapter(it) } ?: Route.Browser
+                        route = settingsReturnChapter?.let { Route.Chapter(it) }
+                            ?: settingsReturnTextPath?.let { Route.TextReader(it) }
+                            ?: Route.Browser
                         settingsReturnChapter = null
+                        settingsReturnTextPath = null
                     },
+                )
+
+                Route.Theme -> SettingsThemeScreen(
+                    themes = themeSet,
+                    onThemesChange = applyThemeSet,
+                    onBack = { route = Route.Settings },
+                )
+
+                Route.LanIp -> LanIpScreen(
+                    dataDirPath = remember { appDataDir(context).absolutePath },
+                    onBack = { route = Route.Settings },
                 )
 
                 Route.DataAdmin -> SettingsDataAdminScreen(
                     dataDirPath = remember { appDataDir(context).absolutePath },
                     onOpenImport = { route = Route.SettingsImport },
-                    onBack = { route = Route.Settings },
+                    // data 目录里点开一个 .txt / .xlr: 直接进只读阅读页, 返回回 data 目录.
+                    onOpenTextFile = { path ->
+                        textReaderFromBrowser = false
+                        readerMenuVisible = false
+                        route = Route.TextReader(path)
+                    },
+                    // 从文件列表进来就回文件列表, 顺手重读一遍目录: 刚才可能在数据目录页里
+                    // 把文件复制 / 移动到内部存储, 列表要能立刻看到.
+                    onBack = {
+                        if (dataAdminFromBrowser) {
+                            browserRevision += 1
+                            route = Route.Browser
+                        } else {
+                            route = Route.Settings
+                        }
+                    },
                 )
 
                 Route.SettingsImport -> SettingsImportScreen(
@@ -766,6 +904,7 @@ fun XlReaderApp(store: SettingsStore, incomingUri: Uri? = null) {
                     // 这里重新读一次，界面立刻换成导入后的设置。
                     onImported = {
                         preferences = store.read()
+                        themeSet = store.readThemes()
                         sensorSettings = sensorStore.read()
                         route = Route.DataAdmin
                     },
