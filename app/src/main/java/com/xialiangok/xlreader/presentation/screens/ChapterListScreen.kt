@@ -51,6 +51,9 @@ private const val RESUME_KEY = "resume"
 /** 紫条的高度：一条窄带子，钉在顶上也不太占地方。 */
 private val MenuBarHeight = 28.dp
 
+/** 紫条文字与边框之间的横向留白：0 的话「菜单 ▾」的箭头会压到边框上。 */
+private val MenuBarHorizontalPadding = 10.dp
+
 /**
  * 章节目录页。
  *
@@ -285,10 +288,14 @@ fun ChapterListScreen(
 /**
  * 顶上那根紫条：既是这一页的开关，也报当前状态。
  *
- * 高度只有 [MenuBarHeight]（标准 Wear 按钮是 52dp），纵向内容边距也压到 0，
+ * 高度只有 [MenuBarHeight]（标准 Wear 按钮是 52dp），纵向内容边距压到 0，
  * 这样文字还塞得下、一条窄带子也不占地方；默认的 minHeight 是 52dp，
  * 但库只在「上层给的最小高度是 0」时才用它（`defaultMinSize` 的规矩），
  * 所以这里显式写死高度是压得下去的。
+ *
+ * 横向不能也写 0：Button 的 contentPadding 是**一整块**，只传 vertical = 0 会把
+ * horizontal 一起清零，框就贴着字（「菜单 ▾」的箭头会压到右边框上）。
+ * 2026-11-01 起固定留 [MenuBarHorizontalPadding]，字和边框之间才有呼吸。
  *
  * 宽度只包住文字（不撑满），外层 Box 负责居中；配色直接用按钮色 + 正文色，
  * 和页面里其他按钮保持一致。
@@ -302,7 +309,7 @@ private fun MenuBar(menuOpen: Boolean, onToggle: () -> Unit) {
             shape = RectangleShape,
             colors = readerButtonColors(),
             border = readerButtonBorder(),
-            contentPadding = PaddingValues(vertical = 0.dp),
+            contentPadding = PaddingValues(horizontal = MenuBarHorizontalPadding, vertical = 0.dp),
         ) {
             Text(
                 // 目录模式提示「点我能开菜单」，菜单模式提示「点我能收起来」。
